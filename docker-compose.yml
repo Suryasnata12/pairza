@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pairza_dev_password}
+      POSTGRES_DB: pairza
+    ports:
+      - "5432:5432"
+    volumes:
+      - pairza_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-pairza_dev_password}@postgres:5432/pairza
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      CORS_ORIGINS: '["http://localhost:3000"]'
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      FRONTEND_URL: http://localhost:3000
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        # Only the WS URL needs to be a build arg: it's read in browser code
+        # (lib/use-session-socket.ts), and Next.js inlines NEXT_PUBLIC_* vars
+        # into the client bundle at build time. The API URL below is read
+        # server-side only (next.config.mjs's rewrites()), so it's a normal
+        # runtime environment variable instead — see the `environment:` key.
+        NEXT_PUBLIC_WS_URL: ws://localhost:8000
+        NEXT_PUBLIC_API_URL: http://api:8000
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      # Server-side only: the Next.js server (inside this container) proxies
+      # browser requests to the api container over Docker's internal network.
+      NEXT_PUBLIC_API_URL: http://api:8000
+    ports:
+      - "3000:3000"
+
+volumes:
+  pairza_postgres_data:
