@@ -44,6 +44,7 @@ async def block_user(db: AsyncSession, blocker_id: uuid.UUID, blocked_id: uuid.U
     session = await _active_session_between(db, blocker_id, blocked_id)
     if session:
         session.status = "FAILED"
+        session.ended_at = utcnow()
         await db.flush()
         mystery = await _get_mystery_with_stages(db, session.mystery_id)
         await rewards_service.process_non_solve(db, session, mystery, "failed")

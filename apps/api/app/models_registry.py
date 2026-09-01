@@ -6,7 +6,7 @@ alembic/env.py (for autogenerate) and tests/conftest.py (for create_all).
 """
 from app.common.database import Base  # noqa: F401
 
-from app.users.models import User, Profile, UserPreferences, RefreshToken  # noqa: F401
+from app.users.models import User, Profile, UserPreferences, RefreshToken, UserDailyActivity  # noqa: F401
 from app.moderation.models import Block, Report, MuteEntry  # noqa: F401
 from app.mysteries.models import Mystery, MysteryStage, MysteryClue  # noqa: F401
 from app.matchmaking.models import Match, MatchHistory  # noqa: F401

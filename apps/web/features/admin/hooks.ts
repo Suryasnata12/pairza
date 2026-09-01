@@ -34,6 +34,11 @@ export interface AdminMystery {
   stage_count: number;
 }
 
+export interface DailyCount {
+  date: string;
+  count: number;
+}
+
 export interface Analytics {
   total_users: number;
   active_sessions: number;
@@ -43,6 +48,15 @@ export interface Analytics {
   average_solve_seconds: number | null;
   category_breakdown: Record<string, number>;
   open_reports: number;
+  dau: number;
+  mau: number;
+  d1_retention: number | null;
+  d7_retention: number | null;
+  d30_retention: number | null;
+  matches_per_user: number;
+  games_completed_per_user: number;
+  average_session_length_seconds: number | null;
+  dau_trend: DailyCount[];
 }
 
 export function useAdminAnalytics() {

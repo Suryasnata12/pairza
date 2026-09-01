@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import Cookie, Depends, Header
+from fastapi import BackgroundTasks, Cookie, Depends, Header
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +9,7 @@ from app.common.exceptions import ForbiddenError, RateLimitedError, Unauthorized
 from app.common.redis_client import RedisKeys, get_redis
 from app.common.security import TokenType, decode_token
 from app.users.models import User
+from app.users.service import record_daily_activity
 
 
 async def _extract_access_token(
@@ -23,6 +24,7 @@ async def _extract_access_token(
 
 
 async def get_current_user(
+    background_tasks: BackgroundTasks,
     token: str = Depends(_extract_access_token),
     db: AsyncSession = Depends(get_db),
 ) -> User:
@@ -38,6 +40,12 @@ async def get_current_user(
         raise UnauthorizedError("This account is no longer active.")
     if user.is_banned:
         raise ForbiddenError("This account has been suspended.")
+
+    # Fire-and-forget: runs after the response is already sent, so recording
+    # "this user was active today" never adds latency to whatever they
+    # actually asked for. See users/service.py::record_daily_activity for
+    # why this uses its own fresh DB session rather than the request's.
+    background_tasks.add_task(record_daily_activity, user.id)
 
     return user
 

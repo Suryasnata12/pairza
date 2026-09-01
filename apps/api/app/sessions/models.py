@@ -33,6 +33,7 @@ class MysterySession(Base, UUIDPrimaryKeyMixin):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)  # started_at + 24h, backend-computed, never trusted from client
     solved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # set once, on ANY terminal transition (solved/failed/expired) — powers "average session length" across every outcome, not just solves
     expiring_notice_sent: Mapped[bool] = mapped_column(Boolean, default=False)
 
     evidence: Mapped[list["InvestigationEvidence"]] = relationship(

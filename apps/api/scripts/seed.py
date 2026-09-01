@@ -10,19 +10,23 @@ import asyncio
 import random
 import sys
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from faker import Faker
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 
 from app.common.database import AsyncSessionLocal
 from app.common.mixins import utcnow
 from app.common.security import hash_password
+from app.matchmaking.models import Match, MatchHistory
 from app.mysteries.models import Mystery, MysteryClue, MysteryStage
 from app.rewards.models import Badge
-from app.users.models import Profile, User, UserPreferences
+from app.sessions.models import MysterySession, UserMysteryHistory
+from app.users.models import Profile, User, UserDailyActivity, UserPreferences
 
 fake = Faker()
 
@@ -260,10 +264,121 @@ async def main() -> None:
         await seed_badges(db)
         users = await seed_users(db)
         await seed_mysteries(db)
+        await seed_historical_engagement(db)
         print(f"Seeded {len(users)} users (or already present), badge set, and mystery library.")
         print("Demo login: demo@pairza.app / PairzaDemo123!")
         print("Admin login: admin@pairza.app / PairzaAdmin123!")
         print("All seed_user_* accounts use password: SeedPassword123!")
+
+
+async def seed_historical_engagement(db) -> None:
+    """
+    Backfills ~5-38 days of simulated daily activity, matches, and completed
+    sessions so the admin analytics dashboard (DAU/MAU/retention/matches-
+    per-user/etc.) has real numbers to show the first time anyone opens it,
+    rather than every metric reading zero or "—" until real usage
+    accumulates.
+
+    Runs exactly once: if any UserDailyActivity row already exists, this is
+    skipped entirely, since running it a second time would layer more fake
+    history on top of by-then-real activity and quietly corrupt it.
+
+    One side effect worth knowing about: this writes real MatchHistory and
+    UserMysteryHistory rows, which the live matchmaking cooldowns (don't
+    re-pair the same two people or re-serve the same mystery too soon) also
+    read from. For a handful of seed accounts, this can very occasionally
+    make an immediate rematch or a specific mystery briefly unavailable —
+    harmless, and it resolves itself as the backdated cooldown window
+    passes.
+    """
+    already_seeded = (await db.execute(select(func.count()).select_from(UserDailyActivity))).scalar_one()
+    if already_seeded > 0:
+        print("Historical engagement data already present — skipping backfill.")
+        return
+
+    user_ids = list(
+        (await db.execute(select(User.id).join(Profile, Profile.user_id == User.id).where(User.is_admin.is_(False))))
+        .scalars()
+        .all()
+    )
+    mysteries = list(
+        (await db.execute(select(Mystery).options(selectinload(Mystery.stages)).where(Mystery.is_published.is_(True))))
+        .scalars()
+        .all()
+    )
+    if not user_ids or not mysteries:
+        print("No users or mysteries to backfill engagement history for — skipping.")
+        return
+
+    today = utcnow().date()
+    activity_by_day: dict = {}
+
+    for user_id in user_ids:
+        join_offset = random.randint(3, 38)
+        current_date = today - timedelta(days=join_offset)
+        active = True
+        while current_date <= today and active:
+            db.add(UserDailyActivity(user_id=user_id, activity_date=current_date))
+            activity_by_day.setdefault(current_date, []).append(user_id)
+            # Rough retention decay: most people who show up keep coming
+            # back for a few days, a chunk drop off, and a smaller loyal
+            # core sticks around for weeks — enough shape for D1/D7/D30
+            # retention to show real, varied percentages rather than 0 or 100.
+            if random.random() > 0.72:
+                active = False
+            current_date += timedelta(days=1)
+
+    await db.commit()
+
+    for day, active_user_ids in activity_by_day.items():
+        pool = active_user_ids.copy()
+        random.shuffle(pool)
+        for user_a_id, user_b_id in zip(pool[::2], pool[1::2]):
+            if random.random() > 0.55:  # not every pair of co-active users starts a fresh match that exact day
+                continue
+
+            mystery = random.choice(mysteries)
+            match_time = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc) + timedelta(
+                hours=random.randint(6, 22), minutes=random.randint(0, 59)
+            )
+
+            match = Match(user_a_id=user_a_id, user_b_id=user_b_id, mystery_id=mystery.id, created_at=match_time)
+            db.add(match)
+            await db.flush()
+            db.add(MatchHistory(user_id=user_a_id, matched_with_user_id=user_b_id, match_id=match.id, created_at=match_time))
+            db.add(MatchHistory(user_id=user_b_id, matched_with_user_id=user_a_id, match_id=match.id, created_at=match_time))
+
+            duration = timedelta(seconds=random.randint(180, 6 * 3600))
+            ended_at = match_time + duration
+            roll = random.random()
+            if roll < 0.68:
+                status, result = "SOLVED", "solved"
+            elif roll < 0.85:
+                status, result = "EXPIRED", "expired"
+            else:
+                status, result = "FAILED", "failed"
+
+            final_stage_number = max((s.stage_number for s in mystery.stages), default=1)
+            session = MysterySession(
+                match_id=match.id, mystery_id=mystery.id, player_a_id=user_a_id, player_b_id=user_b_id,
+                status=status,
+                current_stage_number=final_stage_number if status == "SOLVED" else random.randint(1, final_stage_number),
+                started_at=match_time, expires_at=match_time + timedelta(hours=24),
+                solved_at=ended_at if status == "SOLVED" else None, ended_at=ended_at,
+            )
+            db.add(session)
+            await db.flush()
+
+            for uid in (user_a_id, user_b_id):
+                db.add(UserMysteryHistory(
+                    user_id=uid, mystery_id=mystery.id, session_id=session.id, category=mystery.category,
+                    result=result, solve_seconds=duration.total_seconds() if status == "SOLVED" else None,
+                    created_at=ended_at,
+                ))
+
+    await db.commit()
+    total_activity_days = sum(len(v) for v in activity_by_day.values())
+    print(f"Backfilled {total_activity_days} user-days of activity across {len(user_ids)} users.")
 
 
 if __name__ == "__main__":

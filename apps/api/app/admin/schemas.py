@@ -40,6 +40,11 @@ class ActiveSessionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DailyCount(BaseModel):
+    date: str
+    count: int
+
+
 class AnalyticsOut(BaseModel):
     total_users: int
     active_sessions: int
@@ -49,3 +54,15 @@ class AnalyticsOut(BaseModel):
     average_solve_seconds: float | None
     category_breakdown: dict[str, int]
     open_reports: int
+
+    # Engagement (see admin/service.py's engagement-metrics functions for
+    # exactly how each of these is computed and why).
+    dau: int
+    mau: int
+    d1_retention: float | None
+    d7_retention: float | None
+    d30_retention: float | None
+    matches_per_user: float
+    games_completed_per_user: float
+    average_session_length_seconds: float | None
+    dau_trend: list[DailyCount]

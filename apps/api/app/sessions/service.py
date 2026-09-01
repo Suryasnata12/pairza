@@ -85,6 +85,7 @@ async def ensure_not_expired(db: AsyncSession, session: MysterySession) -> Myste
         return locked
 
     locked.status = "EXPIRED"
+    locked.ended_at = utcnow()
     await db.flush()
     mystery = await _get_mystery_with_stages(db, locked.mystery_id)
     await rewards_service.process_non_solve(db, locked, mystery, "expired")
@@ -245,6 +246,7 @@ async def submit_answer(db: AsyncSession, session: MysterySession, user_id: uuid
     if current_stage.is_final:
         locked_session.status = "SOLVED"
         locked_session.solved_at = utcnow()
+        locked_session.ended_at = locked_session.solved_at
         await db.flush()
         results = await rewards_service.process_solve(db, locked_session, mystery)
         my_result = results[user_id]

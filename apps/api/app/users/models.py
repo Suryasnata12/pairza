@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -99,3 +99,23 @@ class RefreshToken(Base, UUIDPrimaryKeyMixin):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class UserDailyActivity(Base, UUIDPrimaryKeyMixin):
+    """
+    One row per user per calendar day they were seen using the app — the
+    entire foundation DAU/MAU/retention are computed from. Populated by a
+    background task attached to get_current_user (see common/deps.py), so
+    recording activity never adds latency to the request that triggered it.
+
+    `activity_date` is a Date, not a DateTime — we only ever care about
+    "which calendar day," never the time, and the unique index on
+    (user_id, activity_date) means recording the same user twice in one
+    day is a cheap no-op (ON CONFLICT DO NOTHING) rather than a duplicate row.
+    """
+
+    __tablename__ = "user_daily_activity"
+    __table_args__ = (Index("ix_user_daily_activity_unique", "user_id", "activity_date", unique=True),)
+
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    activity_date: Mapped[date] = mapped_column(Date, index=True)
