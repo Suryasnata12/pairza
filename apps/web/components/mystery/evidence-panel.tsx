@@ -71,13 +71,13 @@ export function EvidencePanel({ session }: { session: SessionDetail }) {
       ) : (
         <div className="flex flex-col gap-3">
           {session.evidence.map((e) => (
-            <div key={e.id} className="rounded-xl border border-border-subtle bg-void-elevated-2/40 p-4">
-              <div className="mb-1.5 flex items-center gap-2">
-                <Pin className="h-3.5 w-3.5 text-gold" />
-                <span className="font-medium text-ink">{e.title}</span>
-                <span className="ml-auto text-xs text-ink-faint">{formatRelativeTime(e.created_at)}</span>
+            <div key={e.id} className="min-w-0 rounded-xl border border-border-subtle bg-void-elevated-2/40 p-4">
+              <div className="mb-1.5 flex min-w-0 items-center gap-2">
+                <Pin className="h-3.5 w-3.5 shrink-0 text-gold" />
+                <span className="min-w-0 break-words font-medium text-ink">{e.title}</span>
+                <span className="ml-auto shrink-0 text-xs text-ink-faint">{formatRelativeTime(e.created_at)}</span>
               </div>
-              <p className="text-sm text-ink-muted">{e.content}</p>
+              <p className="break-words text-sm text-ink-muted">{e.content}</p>
               <p className="mt-1.5 text-xs text-ink-faint">
                 Pinned by {e.submitted_by === me?.id ? "you" : "your stranger"}
               </p>

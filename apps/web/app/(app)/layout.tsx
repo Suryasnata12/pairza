@@ -137,7 +137,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
+      <main className="mx-auto max-w-6xl overflow-x-hidden px-6 py-10">{children}</main>
     </div>
   );
 }
