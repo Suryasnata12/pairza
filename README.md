@@ -81,15 +81,6 @@ docker compose exec api python -m scripts.seed
 - Frontend: http://localhost:3000
 - API docs (Swagger): http://localhost:8000/docs
 
-**Demo login:** `demo@pairza.app` / `PairzaDemo123!`
-**Admin login:** `admin@pairza.app` / `PairzaAdmin123!`
-
-### Testing matchmaking yourself
-
-Matchmaking needs two different accounts online at once — open a second browser profile or an incognito window and
-log in as one of the seeded accounts (`seed_user_0@pairza.app` through `seed_user_25@pairza.app`, all with password
-`SeedPassword123!`), then hit "Enter today's mystery" on both. You should get paired within a couple of seconds.
-
 ## Quick start (without Docker)
 
 You'll need Python 3.12+, Node 20+, PostgreSQL 16, and Redis running locally.
