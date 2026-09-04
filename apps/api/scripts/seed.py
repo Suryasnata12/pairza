@@ -22,6 +22,7 @@ from sqlalchemy.orm import selectinload
 from app.common.database import AsyncSessionLocal
 from app.common.mixins import utcnow
 from app.common.security import hash_password
+from app.config.settings import get_settings
 from app.matchmaking.models import Match, MatchHistory
 from app.mysteries.models import Mystery, MysteryClue, MysteryStage
 from app.rewards.models import Badge
@@ -29,6 +30,7 @@ from app.sessions.models import MysterySession, UserMysteryHistory
 from app.users.models import Profile, User, UserDailyActivity, UserPreferences
 
 fake = Faker()
+settings = get_settings()
 
 COUNTRIES = [
     "US", "GB", "CA", "AU", "DE", "FR", "JP", "KR", "BR", "IN",
@@ -69,20 +71,20 @@ async def seed_badges(db) -> None:
 async def seed_users(db, count: int = 24) -> list[User]:
     users = []
     # A stable, memorable demo account first.
-    demo_email = "demo@pairza.app"
+    demo_email = settings.DEMO_USER_EMAIL
     existing = await db.execute(select(User).where(User.email == demo_email))
     if not existing.scalar_one_or_none():
-        demo_user = User(email=demo_email, hashed_password=hash_password("PairzaDemo123!"), is_verified=True)
+        demo_user = User(email=demo_email, hashed_password=hash_password(settings.DEMO_USER_PASSWORD), is_verified=True)
         db.add(demo_user)
         await db.flush()
         db.add(Profile(user_id=demo_user.id, username="curious_fox", country_code="US", xp=250, mystery_count=2, solved_count=2, current_streak=2, longest_streak=2, countries_encountered=["GB"], categories_completed=["geo"]))
         db.add(UserPreferences(user_id=demo_user.id, timezone_region="America/New_York", interests=["true crime", "cartography"], puzzle_experience_level="intermediate"))
         users.append(demo_user)
 
-    admin_email = "admin@pairza.app"
+    admin_email = settings.ADMIN_USER_EMAIL
     existing_admin = await db.execute(select(User).where(User.email == admin_email))
     if not existing_admin.scalar_one_or_none():
-        admin_user = User(email=admin_email, hashed_password=hash_password("PairzaAdmin123!"), is_verified=True, is_admin=True)
+        admin_user = User(email=admin_email, hashed_password=hash_password(settings.ADMIN_USER_PASSWORD), is_verified=True, is_admin=True)
         db.add(admin_user)
         await db.flush()
         db.add(Profile(user_id=admin_user.id, username="pairza_hq", country_code="US"))
@@ -94,7 +96,7 @@ async def seed_users(db, count: int = 24) -> list[User]:
         existing_u = await db.execute(select(User).where(User.email == email))
         if existing_u.scalar_one_or_none():
             continue
-        u = User(email=email, hashed_password=hash_password("SeedPassword123!"), is_verified=True)
+        u = User(email=email, hashed_password=hash_password(settings.SEED_USER_PASSWORD), is_verified=True)
         db.add(u)
         await db.flush()
         username = f"{fake.word()}_{fake.word()}{random.randint(1,99)}"[:32]
@@ -266,9 +268,9 @@ async def main() -> None:
         await seed_mysteries(db)
         await seed_historical_engagement(db)
         print(f"Seeded {len(users)} users (or already present), badge set, and mystery library.")
-        print("Demo login: demo@pairza.app / PairzaDemo123!")
-        print("Admin login: admin@pairza.app / PairzaAdmin123!")
-        print("All seed_user_* accounts use password: SeedPassword123!")
+        print(f"Demo login: {settings.DEMO_USER_EMAIL} / {settings.DEMO_USER_PASSWORD}")
+        print(f"Admin login: {settings.ADMIN_USER_EMAIL} / {settings.ADMIN_USER_PASSWORD}")
+        print(f"All seed_user_* accounts use password: {settings.SEED_USER_PASSWORD}")
 
 
 async def seed_historical_engagement(db) -> None:

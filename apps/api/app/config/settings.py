@@ -55,6 +55,16 @@ class Settings(BaseSettings):
     # --- Frontend URLs (for links in emails etc.) ---
     FRONTEND_URL: str = "http://localhost:3000"
 
+    # --- Seed data credentials (scripts/seed.py only — never used at runtime) ---
+    # Defaults match what the README documents for local/demo use. Override
+    # these via .env for any deployment where scripts/seed.py might run
+    # somewhere less trusted than a laptop.
+    DEMO_USER_EMAIL: str = "demo@pairza.app"
+    DEMO_USER_PASSWORD: str = "PairzaDemo123!"
+    ADMIN_USER_EMAIL: str = "admin@pairza.app"
+    ADMIN_USER_PASSWORD: str = "PairzaAdmin123!"
+    SEED_USER_PASSWORD: str = "SeedPassword123!"
+
 
 @lru_cache
 def get_settings() -> Settings:
