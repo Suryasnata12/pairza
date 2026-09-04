@@ -159,7 +159,7 @@ export default function LandingPage() {
           No profiles to browse. No swiping. Just a mystery neither of you can finish alone.
         </p>
 
-        <div className="mt-16 grid gap-6 md:grid-cols-4 md:items-start md:gap-0">
+        <div className="mt-16 grid gap-6 md:grid-cols-4 md:items-stretch md:gap-0">
           {STEPS.map((step, i) => (
             <div key={step.title} className="contents md:flex md:flex-col md:items-center">
               <motion.div
@@ -167,7 +167,7 @@ export default function LandingPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.5, delay: i * 0.1 }}
-                className="glass-panel flex flex-col gap-3 rounded-2xl p-6 md:h-full"
+                className="glass-panel flex flex-col gap-3 rounded-2xl p-6 md:flex-1"
               >
                 <span className="font-mono text-xs text-signal-teal">STAGE {i + 1}</span>
                 <h3 className="font-display text-lg font-semibold text-ink">{step.title}</h3>
