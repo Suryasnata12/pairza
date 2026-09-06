@@ -173,7 +173,11 @@ export default function LandingPage() {
                 <h3 className="font-display text-lg font-semibold text-ink">{step.title}</h3>
                 <p className="text-sm text-ink-muted">{step.body}</p>
               </motion.div>
-              {i < STEPS.length - 1 && <ConnectorThread index={i} />}
+              {i < STEPS.length - 1 ? (
+                <ConnectorThread index={i} />
+              ) : (
+                <div className="hidden h-8 w-full md:block" aria-hidden="true" />
+              )}
             </div>
           ))}
         </div>
