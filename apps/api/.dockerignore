@@ -1,0 +1,13 @@
+# Never let a real secrets file get copied into the image, even by
+# accident — .env is meant to stay on the host and reach the running
+# container only via docker-compose's env_file/environment mechanisms.
+.env
+.env.*
+!.env.example
+
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.git/
+.gitignore

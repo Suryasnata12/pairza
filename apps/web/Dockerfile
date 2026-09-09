@@ -6,22 +6,16 @@ RUN npm install
 
 COPY . .
 
-# Baked into the client bundle at build time — see next.config.mjs and
-# lib/use-session-socket.ts for why these two are treated differently:
-# NEXT_PUBLIC_API_URL is only read server-side (in the rewrites() function,
-# at request time) so it could be a runtime env var instead, but the
-# WS URL is read directly in browser code and Next.js inlines
-# NEXT_PUBLIC_* vars into the client bundle at build time, so it has to be
-# available here. Defaults match the standard docker-compose setup, where
-# the browser reaches every service through the host's published ports.
-# Baked into the client bundle at build time — see next.config.mjs and
-# lib/use-session-socket.ts for why these two are treated differently:
-# NEXT_PUBLIC_API_URL is only read server-side (in the rewrites() function,
-# at request time) so it's supplied as a normal runtime env var by
-# docker-compose instead. The WS URL IS read directly in browser code, and
-# Next.js inlines NEXT_PUBLIC_* vars into the client bundle at build time,
-# so it has to be available here, with a default matching local dev outside
-# Docker (`npm run dev`).
+# Both of these get baked into the image at build time. The WS URL is
+# straightforward — it's read directly in browser code, and Next.js always
+# inlines NEXT_PUBLIC_* vars into the client bundle at build time. The API
+# URL is less obvious: it's only ever read inside next.config.mjs's
+# rewrites() function, but Next.js evaluates that function ONCE at build
+# time to produce a fixed routing manifest, not per-request at runtime —
+# so this has to be a build arg too, not a runtime environment variable,
+# or docker-compose.yml setting it later would silently have no effect.
+# Defaults here match running outside Docker entirely (`npm run dev`);
+# docker-compose.yml passes the real values for the actual container setup.
 ARG NEXT_PUBLIC_WS_URL=ws://localhost:8000
 ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000

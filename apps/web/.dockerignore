@@ -1,0 +1,11 @@
+# Never let a real secrets file get copied into the image, even by
+# accident — .env.local is meant to stay on the host, and any real
+# runtime config reaches the container via docker-compose instead.
+.env
+.env.*
+!.env.example
+
+node_modules/
+.next/
+.git/
+.gitignore
