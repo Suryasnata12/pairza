@@ -29,8 +29,10 @@ a real matchmaking engine with an automated test suite, and a real Next.js front
   participants on every completed session.
 - Moderation: blocking a partner **immediately ends the active session** for both people (tested); reporting alone
   does not (an admin reviews it instead).
-- Admin: user suspend/ban, mystery CRUD + publish workflow, report review queue, and an analytics endpoint.
-- **27 passing automated tests** against a real Postgres + Redis instance (see `apps/api/tests/`) covering every
+- Admin: user suspend/ban, mystery CRUD + publish workflow, report review queue, category enable/disable, a
+  real AI-backed mystery generation pipeline (see below), and an analytics endpoint (DAU/MAU/retention, matches
+  and completions per user, average session length).
+- **42 passing automated tests** against a real Postgres + Redis instance (see `apps/api/tests/`) covering every
   invariant above, not mocks.
 
 **Frontend (Next.js 16 + React 19 + Tailwind v4) — fully functional:**
@@ -60,6 +62,13 @@ completely real, with the architecture built to extend cleanly:
 - **"One mystery per calendar day"**: there's no hard midnight reset. The 24-hour session window *is* the pacing
   mechanism — once your session ends, you're free to look for the next one immediately. This felt truer to the
   product than adding artificial calendar-day gating the spec didn't fully define.
+- **AI mystery generation**: the full three-stage pipeline (structural → duplicate → semantic validation) is real
+  and tested, but two things inside it are deliberately simpler than a production version might warrant —
+  duplicate detection is exact-normalized-text matching, not embedding-based semantic similarity (would catch
+  "the same mystery, reworded" today; won't catch "conceptually the same mystery with entirely different wording");
+  and there's no per-draft manual review screen (drafts either auto-publish or wait for an admin to flip a single
+  status, rather than a browse-and-approve-one-by-one UI). Both are called out as reasonable initial cuts;
+  extending either doesn't require touching matchmaking, sessions, or the validation pipeline's structure.
 
 None of this is hidden inside the code — search for scope-decision comments if you want the reasoning inline.
 
@@ -124,6 +133,41 @@ mocked. See `apps/api/tests/conftest.py` for how isolation between tests works.
 Without these set, `POST /api/auth/google` returns a clear "not configured" error rather than failing silently —
 email/password auth is completely unaffected either way.
 
+## AI mystery generation
+
+Beyond the hand-authored seed mysteries, Pairza can generate new ones with a real AI pipeline: generation →
+structural validation → duplicate detection → semantic review → save. Nothing here runs during live gameplay —
+it's strictly an offline/admin tool, either from the command line or the admin panel's **Mysteries** tab.
+
+**Setup:** get an API key at https://console.anthropic.com, then add it to your `.env`:
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+Leave it blank to skip this feature entirely — everything else in the app works fine without it.
+
+**From the command line:**
+```bash
+docker compose exec api python -m scripts.generate_mysteries --category geo --quantity 5
+docker compose exec api python -m scripts.generate_mysteries --all-categories --quantity 3
+docker compose exec api python -m scripts.generate_mysteries --category cipher --quantity 2 --dry-run
+```
+`--dry-run` generates and validates without saving anything — good for a first test before spending real API calls
+on a full batch. The report at the end shows exactly what was requested, attempted, rejected (with the specific
+reason), and saved, per category.
+
+**From the admin panel:** the Mysteries tab shows every category's published/draft counts with an enable/disable
+toggle (disabled categories are immediately excluded from matchmaking — see
+`apps/api/tests/test_mystery_selection.py` for the enforcement tests), plus a "Generate more" control that runs
+the same pipeline as a background job and polls for progress.
+
+**Validating a single candidate directly** (useful when iterating on the generation prompt):
+```bash
+docker compose exec api python -m scripts.validate_mystery path/to/candidate.json
+```
+
+By default, anything that passes every validation stage publishes immediately (`MYSTERY_AUTO_PUBLISH=true`). Set
+it to `false` in your `.env` if you'd rather validated mysteries wait for an admin to manually publish each one.
+
 ## Project structure
 
 ```
@@ -144,7 +188,7 @@ pairza/
 │   │   │   ├── admin/           # moderation + mystery CRUD + analytics
 │   │   │   └── common/          # db, redis, security, shared deps
 │   │   ├── alembic/             # migrations
-│   │   ├── scripts/seed.py      # demo data
+│   │   ├── scripts/             # seed.py (demo data), generate_mysteries.py + validate_mystery.py (AI pipeline)
 │   │   └── tests/               # 27 tests, real Postgres + Redis
 │   └── web/                     # Next.js frontend
 │       ├── app/                 # routes (landing, auth, home, mystery, vault, profile, admin)

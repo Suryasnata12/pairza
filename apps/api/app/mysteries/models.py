@@ -1,12 +1,12 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.database import Base
-from app.common.mixins import TimestampMixin, UUIDPrimaryKeyMixin
+from app.common.mixins import TimestampMixin, UUIDPrimaryKeyMixin, utcnow
 
 # Registry of mystery categories (spec section 12). Adding a new category is
 # a one-line addition here plus content — it never requires touching
@@ -26,6 +26,18 @@ MYSTERY_CATEGORIES = [
 
 CLUE_ROLES = ["player_a", "player_b"]
 
+# The AI-generation pipeline's lifecycle (scripts/generate_mysteries.py and
+# scripts/validate_mystery.py). Deliberately kept SEPARATE from the
+# pre-existing `is_published` boolean rather than replacing it:
+# `is_published` remains the one and only gate matchmaking/session code
+# actually reads to decide what's playable (zero risk to already-working
+# gameplay code), while `status` tracks the richer generation/review
+# journey a mystery goes through before it ever reaches that gate.
+# Publishing a mystery (whether by an admin or by auto-approval) always
+# sets both fields together — see admin/service.py::set_publish_state and
+# scripts/generate_mysteries.py.
+MYSTERY_LIFECYCLE_STATUSES = ["DRAFT", "VALIDATED", "PUBLISHED", "DISABLED", "REJECTED"]
+
 
 class Mystery(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "mysteries"
@@ -44,9 +56,32 @@ class Mystery(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
+    # --- AI-generation pipeline fields (all optional/nullable — hand-authored
+    # mysteries, like the ones in scripts/seed.py, simply never set these) ---
+    status: Mapped[str] = mapped_column(String(16), default="DRAFT", server_default="DRAFT")
+    generator_version: Mapped[str | None] = mapped_column(String(64), nullable=True)  # e.g. "claude-sonnet-4-6:v1" — never shown to players
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)  # why validate_mystery.py or an admin rejected this
+
     stages: Mapped[list["MysteryStage"]] = relationship(
         back_populates="mystery", cascade="all, delete-orphan", order_by="MysteryStage.stage_number"
     )
+
+
+class MysteryCategoryConfig(Base, UUIDPrimaryKeyMixin):
+    """
+    Admin on/off switch per category (spec section 15). Deliberately
+    permissive by absence: a category with no row here is treated as
+    ENABLED (see mysteries/service.py's selection query) so adding a new
+    entry to MYSTERY_CATEGORIES above never silently breaks matchmaking by
+    requiring a DB row to exist first — only explicit `is_enabled=False`
+    rows ever remove a category from rotation.
+    """
+
+    __tablename__ = "mystery_category_configs"
+
+    category: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class MysteryStage(Base, UUIDPrimaryKeyMixin):

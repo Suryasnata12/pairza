@@ -1,19 +1,25 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.admin import service
+from app.admin import generation_jobs, service
 from app.admin.schemas import (
     ActiveSessionOut,
     AdminUserOut,
     AnalyticsOut,
+    CategoryConfigOut,
+    CategoryPoolCountsOut,
+    GenerateMysteriesRequest,
+    GenerationJobStatusOut,
     ReportReviewRequest,
     SuspendUserRequest,
 )
 from app.common.database import get_db
 from app.common.deps import get_current_admin
+from app.common.exceptions import ConflictError, ValidationFailedError
 from app.moderation.schemas import ReportOut
+from app.mysteries.models import MYSTERY_CATEGORIES
 from app.mysteries.schemas import MysteryAdminOut, MysteryCreate, MysteryUpdate
 from app.users.models import User
 
@@ -124,3 +130,42 @@ async def active_sessions(admin: User = Depends(get_current_admin), db: AsyncSes
 @router.get("/analytics", response_model=AnalyticsOut)
 async def analytics(admin: User = Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
     return await service.get_analytics(db)
+
+
+@router.get("/mysteries/categories", response_model=CategoryPoolCountsOut)
+async def get_category_configs(admin: User = Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
+    configs = await service.list_category_configs(db)
+    return CategoryPoolCountsOut(categories=[CategoryConfigOut(**c) for c in configs])
+
+
+@router.post("/mysteries/categories/{category}/toggle")
+async def toggle_category(category: str, is_enabled: bool, admin: User = Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
+    await service.set_category_enabled(db, category, is_enabled)
+    return {"category": category, "is_enabled": is_enabled}
+
+
+@router.get("/mysteries/generate/status", response_model=GenerationJobStatusOut)
+async def generation_status(admin: User = Depends(get_current_admin)):
+    return GenerationJobStatusOut(**generation_jobs.get_status())
+
+
+@router.post("/mysteries/generate", response_model=GenerationJobStatusOut, status_code=202)
+async def trigger_generation(
+    payload: GenerateMysteriesRequest, background_tasks: BackgroundTasks, admin: User = Depends(get_current_admin)
+):
+    """
+    Kicks off generation as a background task and returns immediately
+    (202 Accepted) — a real run makes one AI API call per attempt and can
+    take anywhere from seconds to minutes. Poll GET
+    /admin/mysteries/generate/status for progress and the final report.
+    """
+    if not payload.category and not payload.all_categories:
+        raise ValidationFailedError("Specify either a category or all_categories=true.")
+
+    categories = MYSTERY_CATEGORIES if payload.all_categories else [payload.category]
+
+    if not generation_jobs.start():
+        raise ConflictError("A generation job is already running — wait for it to finish first.", code="generation_in_progress")
+
+    background_tasks.add_task(service.run_mystery_generation_job, categories, payload.quantity, payload.difficulty)
+    return GenerationJobStatusOut(**generation_jobs.get_status())

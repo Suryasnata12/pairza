@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AdminUserOut(BaseModel):
@@ -66,3 +66,31 @@ class AnalyticsOut(BaseModel):
     games_completed_per_user: float
     average_session_length_seconds: float | None
     dau_trend: list[DailyCount]
+
+
+# --- Mystery generation pipeline admin controls ---
+
+class CategoryConfigOut(BaseModel):
+    category: str
+    is_enabled: bool
+    published_count: int
+    draft_count: int
+
+
+class CategoryPoolCountsOut(BaseModel):
+    categories: list[CategoryConfigOut]
+
+
+class GenerateMysteriesRequest(BaseModel):
+    category: str | None = None  # None + all_categories=True means every category
+    all_categories: bool = False
+    quantity: int = Field(default=5, ge=1, le=50)
+    difficulty: int | None = Field(default=None, ge=1, le=5)
+
+
+class GenerationJobStatusOut(BaseModel):
+    status: str  # "idle" | "running" | "done" | "failed"
+    started_at: str | None = None
+    finished_at: str | None = None
+    report: list[dict] | None = None
+    error: str | None = None

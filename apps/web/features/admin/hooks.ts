@@ -113,3 +113,64 @@ export function useTogglePublish() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "mysteries"] }),
   });
 }
+
+// --- Mystery generation pipeline ---
+
+export interface CategoryConfig {
+  category: string;
+  is_enabled: boolean;
+  published_count: number;
+  draft_count: number;
+}
+
+export interface GenerationJobStatus {
+  status: "idle" | "running" | "done" | "failed";
+  started_at: string | null;
+  finished_at: string | null;
+  report: Array<{
+    category: string;
+    requested: number;
+    attempts: number;
+    rejected: number;
+    valid: number;
+    saved: number;
+    rejections: string[];
+  }> | null;
+  error: string | null;
+}
+
+export function useCategoryConfigs() {
+  return useQuery({
+    queryKey: ["admin", "mystery-categories"],
+    queryFn: () => api.get<{ categories: CategoryConfig[] }>("/admin/mysteries/categories"),
+  });
+}
+
+export function useToggleCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ category, isEnabled }: { category: string; isEnabled: boolean }) =>
+      api.post(`/admin/mysteries/categories/${category}/toggle?is_enabled=${isEnabled}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "mystery-categories"] }),
+  });
+}
+
+export function useGenerationStatus(enabled: boolean) {
+  return useQuery({
+    queryKey: ["admin", "generation-status"],
+    queryFn: () => api.get<GenerationJobStatus>("/admin/mysteries/generate/status"),
+    enabled,
+    refetchInterval: (query) => (query.state.data?.status === "running" ? 2000 : false),
+  });
+}
+
+export function useTriggerGeneration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { category?: string; all_categories?: boolean; quantity: number; difficulty?: number }) =>
+      api.post<GenerationJobStatus>("/admin/mysteries/generate", input),
+    onSuccess: (data) => {
+      qc.setQueryData(["admin", "generation-status"], data);
+    },
+  });
+}

@@ -65,6 +65,18 @@ class Settings(BaseSettings):
     ADMIN_USER_PASSWORD: str = "PairzaAdmin123!"
     SEED_USER_PASSWORD: str = "SeedPassword123!"
 
+    # --- AI mystery generation (scripts/generate_mysteries.py) ---
+    # Never used at request-serving time — only by the offline CLI script.
+    # Leaving ANTHROPIC_API_KEY blank makes the script fail fast with a
+    # clear message rather than a confusing HTTP error.
+    ANTHROPIC_API_KEY: str = ""
+    MYSTERY_GENERATOR_MODEL: str = "claude-sonnet-4-6"
+    # If True, mysteries that pass every validation stage go straight to
+    # PUBLISHED (playable immediately). If False, they stop at VALIDATED
+    # and an admin must explicitly publish each one — see section 10 of
+    # the spec for why a team might want either policy.
+    MYSTERY_AUTO_PUBLISH: bool = True
+
 
 @lru_cache
 def get_settings() -> Settings:

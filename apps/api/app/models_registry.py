@@ -8,7 +8,7 @@ from app.common.database import Base  # noqa: F401
 
 from app.users.models import User, Profile, UserPreferences, RefreshToken, UserDailyActivity  # noqa: F401
 from app.moderation.models import Block, Report, MuteEntry  # noqa: F401
-from app.mysteries.models import Mystery, MysteryStage, MysteryClue  # noqa: F401
+from app.mysteries.models import Mystery, MysteryStage, MysteryClue, MysteryCategoryConfig  # noqa: F401
 from app.matchmaking.models import Match, MatchHistory  # noqa: F401
 from app.sessions.models import (  # noqa: F401
     MysterySession,

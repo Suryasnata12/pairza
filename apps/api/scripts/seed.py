@@ -24,7 +24,7 @@ from app.common.mixins import utcnow
 from app.common.security import hash_password
 from app.config.settings import get_settings
 from app.matchmaking.models import Match, MatchHistory
-from app.mysteries.models import Mystery, MysteryClue, MysteryStage
+from app.mysteries.models import MYSTERY_CATEGORIES, Mystery, MysteryCategoryConfig, MysteryClue, MysteryStage
 from app.rewards.models import Badge
 from app.sessions.models import MysterySession, UserMysteryHistory
 from app.users.models import Profile, User, UserDailyActivity, UserPreferences
@@ -261,11 +261,24 @@ async def seed_mysteries(db) -> None:
     await db.commit()
 
 
+async def seed_category_configs(db) -> None:
+    """One explicit, enabled config row per known category — not strictly
+    required (absence already means enabled, see MysteryCategoryConfig's
+    docstring), but gives the admin panel something real to show and
+    toggle for every category from the very first load."""
+    existing = set((await db.execute(select(MysteryCategoryConfig.category))).scalars().all())
+    for category in MYSTERY_CATEGORIES:
+        if category not in existing:
+            db.add(MysteryCategoryConfig(category=category, is_enabled=True, updated_at=utcnow()))
+    await db.commit()
+
+
 async def main() -> None:
     async with AsyncSessionLocal() as db:
         await seed_badges(db)
         users = await seed_users(db)
         await seed_mysteries(db)
+        await seed_category_configs(db)
         await seed_historical_engagement(db)
         print(f"Seeded {len(users)} users (or already present), badge set, and mystery library.")
         print(f"Demo login: {settings.DEMO_USER_EMAIL} / {settings.DEMO_USER_PASSWORD}")

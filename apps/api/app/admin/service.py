@@ -7,9 +7,10 @@ from sqlalchemy.orm import selectinload
 
 from app.common.exceptions import NotFoundError
 from app.common.mixins import utcnow
+from app.admin import generation_jobs
 from app.matchmaking.models import MatchHistory
 from app.moderation.models import Report
-from app.mysteries.models import Mystery, MysteryClue, MysteryStage
+from app.mysteries.models import MYSTERY_CATEGORIES, Mystery, MysteryCategoryConfig, MysteryClue, MysteryStage
 from app.mysteries.schemas import MysteryCreate, MysteryUpdate
 from app.sessions.models import MysterySession, UserMysteryHistory
 from app.users.models import Profile, User, UserDailyActivity
@@ -182,7 +183,6 @@ async def get_analytics(db: AsyncSession) -> dict:
         **engagement,
     }
 
-
 # --- Engagement analytics (DAU/MAU/retention/gameplay rates) ---
 #
 # Everything here reads from UserDailyActivity, which is populated by a
@@ -312,3 +312,77 @@ async def get_engagement_metrics(db: AsyncSession) -> dict:
         "average_session_length_seconds": await get_average_session_length_seconds(db),
         "dau_trend": await get_dau_trend(db),
     }
+
+
+# --- Mystery generation pipeline: category controls + pool visibility + trigger ---
+
+async def list_category_configs(db: AsyncSession) -> list[dict]:
+    """Every known category, not just ones with an explicit config row —
+    see MysteryCategoryConfig's docstring for why absence means enabled."""
+    disabled_rows = (await db.execute(select(MysteryCategoryConfig.category, MysteryCategoryConfig.is_enabled))).all()
+    disabled_by_category = {cat: enabled for cat, enabled in disabled_rows}
+
+    published_rows = (
+        await db.execute(
+            select(Mystery.category, func.count()).where(Mystery.status == "PUBLISHED").group_by(Mystery.category)
+        )
+    ).all()
+    published_by_category = dict(published_rows)
+
+    draft_rows = (
+        await db.execute(
+            select(Mystery.category, func.count())
+            .where(Mystery.status.in_(["DRAFT", "VALIDATED"]))
+            .group_by(Mystery.category)
+        )
+    ).all()
+    draft_by_category = dict(draft_rows)
+
+    return [
+        {
+            "category": cat,
+            "is_enabled": disabled_by_category.get(cat, True),
+            "published_count": published_by_category.get(cat, 0),
+            "draft_count": draft_by_category.get(cat, 0),
+        }
+        for cat in MYSTERY_CATEGORIES
+    ]
+
+
+async def set_category_enabled(db: AsyncSession, category: str, is_enabled: bool) -> None:
+    if category not in MYSTERY_CATEGORIES:
+        raise NotFoundError(f"'{category}' isn't a known mystery category.")
+
+    result = await db.execute(select(MysteryCategoryConfig).where(MysteryCategoryConfig.category == category))
+    config = result.scalar_one_or_none()
+    if config:
+        config.is_enabled = is_enabled
+        config.updated_at = utcnow()
+    else:
+        db.add(MysteryCategoryConfig(category=category, is_enabled=is_enabled, updated_at=utcnow()))
+    await db.commit()
+
+
+async def run_mystery_generation_job(categories: list[str], quantity: int, difficulty: int | None) -> None:
+    """
+    The actual background-task body (see admin/router.py's POST
+    /admin/mysteries/generate, which schedules this via FastAPI's
+    BackgroundTasks rather than blocking the request — a real generation
+    run makes one AI API call per attempt and can take a while).
+
+    Deliberately does NOT import scripts.generate_mysteries at module load
+    time — it's imported here, lazily, so the admin API can boot even in
+    environments that only ever run it via the standalone CLI.
+    """
+    from app.common.database import AsyncSessionLocal
+    from scripts.generate_mysteries import generate_for_category
+
+    try:
+        report = []
+        async with AsyncSessionLocal() as db:
+            for category in categories:
+                stats = await generate_for_category(db, category, quantity, difficulty, dry_run=False)
+                report.append(stats)
+        generation_jobs.finish(report)
+    except Exception as exc:  # noqa: BLE001 — surfaced to the admin via job status, not swallowed silently
+        generation_jobs.fail(str(exc))

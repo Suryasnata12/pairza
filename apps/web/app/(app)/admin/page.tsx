@@ -17,9 +17,13 @@ import {
   useAdminReports,
   useAdminUsers,
   useBanUser,
+  useCategoryConfigs,
+  useGenerationStatus,
   useReviewReport,
   useSuspendUser,
+  useToggleCategory,
   useTogglePublish,
+  useTriggerGeneration,
 } from "@/features/admin/hooks";
 import { CATEGORY_LABELS } from "@/types";
 import { formatCountdown } from "@/lib/utils";
@@ -258,39 +262,156 @@ function MysteriesTab() {
   const togglePublish = useTogglePublish();
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-border-subtle">
-      <table className="w-full text-sm">
-        <thead className="border-b border-border-subtle bg-white/5 text-left text-xs uppercase text-ink-faint">
-          <tr>
-            <th className="p-3">Title</th>
-            <th className="p-3">Category</th>
-            <th className="p-3">Difficulty</th>
-            <th className="p-3">Status</th>
-            <th className="p-3">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {mysteries?.map((m) => (
-            <tr key={m.id} className="border-b border-border-subtle last:border-0">
-              <td className="p-3 font-medium text-ink">{m.title}</td>
-              <td className="p-3 text-ink-muted">{CATEGORY_LABELS[m.category] ?? m.category}</td>
-              <td className="p-3 text-ink-muted">{m.difficulty}/5</td>
-              <td className="p-3">
-                <Badge variant={m.is_published ? "teal" : "default"}>{m.is_published ? "Published" : "Draft"}</Badge>
-              </td>
-              <td className="p-3">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => togglePublish.mutate({ mysteryId: m.id, publish: !m.is_published })}
-                >
-                  {m.is_published ? "Unpublish" : "Publish"}
-                </Button>
-              </td>
+    <div className="flex flex-col gap-8">
+      <CategoryPoolSection />
+      <div className="overflow-x-auto rounded-xl border border-border-subtle">
+        <table className="w-full text-sm">
+          <thead className="border-b border-border-subtle bg-white/5 text-left text-xs uppercase text-ink-faint">
+            <tr>
+              <th className="p-3">Title</th>
+              <th className="p-3">Category</th>
+              <th className="p-3">Difficulty</th>
+              <th className="p-3">Status</th>
+              <th className="p-3">Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {mysteries?.map((m) => (
+              <tr key={m.id} className="border-b border-border-subtle last:border-0">
+                <td className="p-3 font-medium text-ink">{m.title}</td>
+                <td className="p-3 text-ink-muted">{CATEGORY_LABELS[m.category] ?? m.category}</td>
+                <td className="p-3 text-ink-muted">{m.difficulty}/5</td>
+                <td className="p-3">
+                  <Badge variant={m.is_published ? "teal" : "default"}>{m.is_published ? "Published" : "Draft"}</Badge>
+                </td>
+                <td className="p-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => togglePublish.mutate({ mysteryId: m.id, publish: !m.is_published })}
+                  >
+                    {m.is_published ? "Unpublish" : "Publish"}
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function CategoryPoolSection() {
+  const { data } = useCategoryConfigs();
+  const toggleCategory = useToggleCategory();
+  const [genCategory, setGenCategory] = useState<string>("");
+  const [genAll, setGenAll] = useState(false);
+  const [genQuantity, setGenQuantity] = useState(5);
+  const triggerGeneration = useTriggerGeneration();
+  const { data: jobStatus } = useGenerationStatus(true);
+  const isRunning = jobStatus?.status === "running";
+
+  async function handleGenerate() {
+    if (!genAll && !genCategory) return;
+    await triggerGeneration.mutateAsync({
+      category: genAll ? undefined : genCategory,
+      all_categories: genAll,
+      quantity: genQuantity,
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <SectionHeading>Mystery pool by category</SectionHeading>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {data?.categories.map((c) => (
+          <Card key={c.category}>
+            <CardContent className="flex flex-col gap-2 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-ink">{CATEGORY_LABELS[c.category] ?? c.category}</span>
+                <Badge variant={c.is_enabled ? "teal" : "coral"}>{c.is_enabled ? "On" : "Off"}</Badge>
+              </div>
+              <p className="text-xs text-ink-faint">
+                {c.published_count} published · {c.draft_count} draft
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => toggleCategory.mutate({ category: c.category, isEnabled: !c.is_enabled })}
+              >
+                {c.is_enabled ? "Disable" : "Enable"}
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Generate more mysteries</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 pt-0">
+          <p className="text-xs text-ink-faint">
+            Runs the AI generation pipeline (structural + duplicate + semantic validation) and saves only what
+            passes. Requires ANTHROPIC_API_KEY to be configured on the server — see .env.example.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1.5 text-sm text-ink-muted">
+              <input type="checkbox" checked={genAll} onChange={(e) => setGenAll(e.target.checked)} />
+              All categories
+            </label>
+            {!genAll && (
+              <select
+                className="h-9 rounded-lg border border-border-subtle bg-void-elevated-2 px-3 text-sm text-ink"
+                value={genCategory}
+                onChange={(e) => setGenCategory(e.target.value)}
+              >
+                <option value="">Choose a category…</option>
+                {data?.categories.map((c) => (
+                  <option key={c.category} value={c.category}>
+                    {CATEGORY_LABELS[c.category] ?? c.category}
+                  </option>
+                ))}
+              </select>
+            )}
+            <Input
+              type="number"
+              min={1}
+              max={50}
+              value={genQuantity}
+              onChange={(e) => setGenQuantity(Number(e.target.value))}
+              className="w-24"
+            />
+            <Button size="sm" onClick={handleGenerate} disabled={isRunning || (!genAll && !genCategory)}>
+              {isRunning ? "Generating…" : "Generate"}
+            </Button>
+          </div>
+
+          {jobStatus && jobStatus.status !== "idle" && (
+            <div className="mt-2 rounded-lg border border-border-subtle bg-void-elevated-2/40 p-3 text-xs">
+              <p className="font-medium text-ink">
+                {jobStatus.status === "running" && "Generating — this can take a while, one AI call per attempt…"}
+                {jobStatus.status === "done" && "Last run finished:"}
+                {jobStatus.status === "failed" && `Failed: ${jobStatus.error}`}
+              </p>
+              {jobStatus.report?.map((r) => (
+                <div key={r.category} className="mt-1 text-ink-muted">
+                  <span className="font-mono">{r.category}</span>: requested {r.requested}, attempts {r.attempts},
+                  rejected {r.rejected}, saved {r.saved}
+                  {r.rejections.length > 0 && (
+                    <ul className="ml-4 list-disc text-ink-faint">
+                      {r.rejections.slice(0, 5).map((reason, i) => (
+                        <li key={i}>{reason}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

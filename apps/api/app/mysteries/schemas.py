@@ -89,3 +89,36 @@ class MysteryAdminOut(BaseModel):
     stage_count: int = 0
 
     model_config = {"from_attributes": True}
+
+
+# --- AI generation pipeline (scripts/generate_mysteries.py, scripts/validate_mystery.py) ---
+# This is the exact JSON shape the generator prompts the model to return,
+# and the shape validate_mystery.py's structural checks are written against.
+# Kept separate from MysteryCreate above because this one has stricter,
+# generation-specific validation (min/max lengths, required stage shape)
+# baked into the field constraints themselves, catching malformed model
+# output before it ever reaches the deterministic checklist.
+
+class ClueCandidate(BaseModel):
+    role: str = Field(pattern="^(player_a|player_b)$")
+    text: str = Field(min_length=10, max_length=600)
+
+
+class StageCandidate(BaseModel):
+    stage_number: int = Field(ge=1)
+    is_final: bool
+    context: str | None = Field(default=None, max_length=400)
+    checkpoint_answer_patterns: list[str] | None = None
+    clues: list[ClueCandidate] = Field(min_length=2, max_length=2)
+
+
+class MysteryCandidate(BaseModel):
+    """The generator's raw output for one mystery, before any validation."""
+
+    title: str = Field(min_length=3, max_length=200)
+    category: str
+    difficulty: int = Field(ge=1, le=5)
+    summary: str = Field(min_length=10, max_length=400)
+    flavor_text: str | None = Field(default=None, max_length=400)
+    final_answer_patterns: list[str] = Field(min_length=1, max_length=8)
+    stages: list[StageCandidate] = Field(min_length=1, max_length=5)
