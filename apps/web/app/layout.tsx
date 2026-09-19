@@ -5,7 +5,7 @@ import { AuthProvider } from "@/app/providers/auth-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Pairza — One Stranger. One Mystery. One Day.",
+  title: "Pairza — One Stranger. One Mystery. One Chance.",
   description:
     "Every day, Pairza pairs you with one stranger, somewhere in the world, to solve one mystery together before the connection expires.",
   icons: {

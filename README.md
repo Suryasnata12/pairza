@@ -1,6 +1,6 @@
 # Pairza
 
-**One stranger. One mystery. One day.**
+**One stranger. One mystery. One chance.**
 
 Every 24 hours, Pairza randomly pairs a user with one other person, somewhere in the world, and gives each of them
 half the clues to a mystery. Neither can solve it alone. The connection expires in 24 hours whether they solve it

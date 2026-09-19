@@ -120,7 +120,7 @@ export default function LandingPage() {
             One mystery.
             <br />
             <span className="bg-gradient-to-r from-signal-teal to-signal-violet bg-clip-text text-transparent">
-              One day.
+              One chance.
             </span>
           </motion.h1>
 
@@ -272,7 +272,7 @@ export default function LandingPage() {
       </section>
 
       <footer className="relative border-t border-border-subtle px-6 py-10 text-center text-sm text-ink-faint">
-        Pairza — one stranger, one mystery, one day.
+        Pairza — one stranger, one mystery, one chance.
       </footer>
     </div>
   );
