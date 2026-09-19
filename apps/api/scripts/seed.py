@@ -121,7 +121,7 @@ async def _add_mystery(db, title, category, difficulty, summary, flavor_text, fi
         return
     mystery = Mystery(
         title=title, category=category, difficulty=difficulty, summary=summary,
-        flavor_text=flavor_text, final_answer_patterns=final_answers, is_published=True,
+        flavor_text=flavor_text, final_answer_patterns=final_answers, is_published=True, status="PUBLISHED",
     )
     db.add(mystery)
     await db.flush()

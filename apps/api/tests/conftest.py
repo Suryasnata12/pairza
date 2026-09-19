@@ -71,7 +71,7 @@ async def make_mystery(
     mystery = Mystery(
         title=title, category=category, difficulty=difficulty,
         summary="A test mystery.", final_answer_patterns=final_answers or ["correct answer"],
-        is_published=is_published,
+        is_published=is_published, status="PUBLISHED" if is_published else "DRAFT",
     )
     db.add(mystery)
     await db.flush()

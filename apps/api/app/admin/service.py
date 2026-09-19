@@ -108,11 +108,37 @@ async def update_mystery(db: AsyncSession, mystery_id: uuid.UUID, payload: Myste
     if not mystery:
         raise NotFoundError("That mystery doesn't exist.")
     for field, value in payload.model_dump(exclude_unset=True).items():
-        if value is not None:
+        if value is None:
+            continue
+        if field == "is_published":
+            # Never set the flag directly — it must move in lockstep with `status`.
+            _apply_publish_state(mystery, value)
+        else:
             setattr(mystery, field, value)
     await db.commit()
     await db.refresh(mystery)
     return mystery
+
+
+def _apply_publish_state(mystery: Mystery, is_published: bool) -> None:
+    """
+    The ONE place that flips a mystery's playability. `is_published` is the
+    gate matchmaking reads; `status` is the richer lifecycle field the admin
+    panel and the AI generator read (see the note above
+    MYSTERY_LIFECYCLE_STATUSES in mysteries/models.py). They must always
+    change together, or the admin category counts and the generator's
+    few-shot example lookup silently go wrong.
+
+    - Publishing always ends at PUBLISHED.
+    - Unpublishing moves PUBLISHED -> DISABLED (pulled from rotation). A
+      mystery that was never live (DRAFT / VALIDATED / REJECTED) keeps its
+      status — unpublishing it is a no-op for the lifecycle.
+    """
+    mystery.is_published = is_published
+    if is_published:
+        mystery.status = "PUBLISHED"
+    elif mystery.status == "PUBLISHED":
+        mystery.status = "DISABLED"
 
 
 async def set_publish_state(db: AsyncSession, mystery_id: uuid.UUID, is_published: bool) -> Mystery:
@@ -120,7 +146,7 @@ async def set_publish_state(db: AsyncSession, mystery_id: uuid.UUID, is_publishe
     mystery = result.scalar_one_or_none()
     if not mystery:
         raise NotFoundError("That mystery doesn't exist.")
-    mystery.is_published = is_published
+    _apply_publish_state(mystery, is_published)
     await db.commit()
     return mystery
 
