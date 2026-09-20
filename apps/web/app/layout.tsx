@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Toaster } from "sonner";
 import { QueryProvider } from "@/app/providers/query-provider";
 import { AuthProvider } from "@/app/providers/auth-provider";
+import { AmbienceController } from "@/components/audio/ambience-controller";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <QueryProvider>
           <AuthProvider>
             {children}
+            <AmbienceController />
             <Toaster
               theme="dark"
               position="top-center"

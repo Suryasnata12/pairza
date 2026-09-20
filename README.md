@@ -70,8 +70,9 @@ completely real, with the architecture built to extend cleanly:
 - **Creator/UGC system**: intentionally not built — the spec itself flags this as post-MVP.
 - **Frontend automated tests**: the backend has full test coverage; the frontend was verified via a real production
   build + manual end-to-end smoke testing (login, matchmaking, chat, all working through the actual proxy/cookie
-  architecture), but doesn't yet have a Vitest/Playwright suite. The one exception is the countdown's timing math,
-  which lives in a dependency-free module with its own `node --test` suite (`npm test` in `apps/web`, Node 22.6+).
+  architecture), but doesn't yet have a Vitest/Playwright suite. The exceptions are the countdown's timing math and
+  the game-audio engine, which live in dependency-free modules with their own `node --test` suites (`npm test` in
+  `apps/web`, Node 22.6+).
 - **"One mystery per calendar day"**: there's no hard midnight reset and no daily cap. Once your session ends
   (solved, or its time limit runs out), you're free to look for the next one immediately; the match and mystery
   cooldowns are what keep repeats away. This felt truer to the product than adding artificial calendar-day gating
@@ -108,6 +109,27 @@ Everything below reads from it instead of restating the numbers:
 
 Sessions that were already in progress when this shipped keep the end time they were created with (up to 24 hours)
 and finish normally; no data migration is involved.
+
+## Game audio
+
+Sound is handled by one reusable audio manager in `apps/web/lib/audio/`; nothing else in the app creates audio.
+
+- **Assets** live in `apps/web/public/audio/` and are served from `/audio/…`. Today that is just
+  `investigation_ambient_01.ogg`, the looping background ambience.
+- **When it plays** — app-wide, as one continuous track: it starts on the landing page (`/`) and keeps playing through
+  login, home and the investigation screen, without restarting when the player navigates. `AmbienceController` is
+  mounted once in the root layout, so only a full page reload restarts it. Browsers don't allow sound before the
+  visitor has interacted, so on a cold page load it begins at the first click, tap or key press.
+- **Volume** — master volume, music/ambience volume and mute live in `stores/use-audio-store.ts` and are saved per
+  device in `localStorage` (`pairza_audio_settings_v1`). The default ambience level is deliberately low. A small
+  mute button floats in the bottom-left corner of every page; the volume sliders are a future settings screen's job.
+- **Adding a sound** — drop the file into `public/audio/`, add one entry to `lib/audio/sounds.ts`, then call
+  `audioManager.play("<id>")` (`import { audioManager } from "@/lib/audio"`). Looping sounds keep a single instance;
+  one-shot effects may overlap. A missing or undecodable file never breaks the game: it logs one console warning and
+  stays silent.
+- **Browsers** — audio can't start until the player has interacted with the page, so the manager waits for the first
+  click/tap/keypress when it has to. Ogg Vorbis isn't decodable everywhere (notably older Safari); `sources` in
+  `sounds.ts` takes a fallback format (`.m4a` / `.mp3`) when one is needed.
 
 ## Quick start (Docker — recommended)
 
