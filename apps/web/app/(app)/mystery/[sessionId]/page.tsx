@@ -10,6 +10,8 @@ import { EvidencePanel } from "@/components/mystery/evidence-panel";
 import { ChatPanel } from "@/components/mystery/chat-panel";
 import { PartnerCard } from "@/components/mystery/partner-card";
 import { useSession } from "@/features/session/hooks";
+import { useSessionClock } from "@/lib/use-session-clock";
+import type { SessionDetail } from "@/types";
 
 export default function MysteryWorkspacePage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = use(params);
@@ -34,6 +36,21 @@ export default function MysteryWorkspacePage({ params }: { params: Promise<{ ses
     );
   }
 
+  return <Workspace serverSession={session} />;
+}
+
+function Workspace({ serverSession }: { serverSession: SessionDetail }) {
+  // The single countdown for this page: counts down to the server's `expires_at`, corrected by
+  // `server_time`, so both players see the same time and a refresh can't reset it.
+  const clock = useSessionClock(serverSession);
+
+  // The instant that clock reaches zero the workspace locks — answers, evidence and chat all key off
+  // `session.status !== "ACTIVE"` — without waiting on the round-trip that confirms it. The server stays
+  // the authority (it already refuses anything after the deadline) and the clock hook keeps asking it to
+  // settle the session; if it ever disagreed, the next response corrects this on its own.
+  const session: SessionDetail =
+    clock.isTimeUp && serverSession.status === "ACTIVE" ? { ...serverSession, status: "EXPIRED" } : serverSession;
+
   // Partner id is included (privacy-safe: just an opaque UUID) specifically
   // so block/report have something to act on.
   const partnerId = session.partner_id ?? undefined;
@@ -44,7 +61,7 @@ export default function MysteryWorkspacePage({ params }: { params: Promise<{ ses
         <Link href="/home" className="flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink">
           <ArrowLeft className="h-4 w-4" /> Today
         </Link>
-        <CountdownTimer expiresAt={session.expires_at} />
+        <CountdownTimer session={session} clock={clock} />
       </div>
 
       {/* Desktop: 3-pane layout */}

@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 
 import pytest
 from redis.asyncio import from_url
@@ -121,3 +122,38 @@ async def test_join_is_idempotent_when_already_matched(db, redis):
     from sqlalchemy import select
     all_sessions = (await db.execute(select(MysterySession))).scalars().all()
     assert len(all_sessions) == 1
+
+
+# --- Difficulty-based time limits -------------------------------------------------------------
+
+@pytest.mark.parametrize("difficulty,minutes", [(1, 5), (2, 10), (3, 15), (4, 20), (5, 30)])
+async def test_session_end_time_is_set_from_the_mysterys_difficulty(db, redis, difficulty, minutes):
+    """The spec table, restated independently of the config module so a silent edit to it fails here."""
+    await make_mystery(db, title=f"Timed {difficulty}", difficulty=difficulty)
+    user_a = await make_user(db, f"td{difficulty}a@test.com", f"td{difficulty}a")
+    user_b = await make_user(db, f"td{difficulty}b@test.com", f"td{difficulty}b")
+
+    await matchmaking_service.join_matchmaking(db, redis, user_a)
+    result = await matchmaking_service.join_matchmaking(db, redis, user_b)
+    assert result["status"] == "matched"
+
+    session = result["session"]
+    await db.refresh(session)
+    assert session.expires_at - session.started_at == timedelta(minutes=minutes)
+
+
+async def test_matched_players_get_one_shared_deadline(db, redis):
+    await make_mystery(db, title="Shared Deadline", difficulty=2)
+    user_a = await make_user(db, "sd_a@test.com", "sd_a")
+    user_b = await make_user(db, "sd_b@test.com", "sd_b")
+
+    await matchmaking_service.join_matchmaking(db, redis, user_a)
+    result = await matchmaking_service.join_matchmaking(db, redis, user_b)
+    session = result["session"]
+
+    from app.sessions.service import build_session_detail
+    detail_a = await build_session_detail(db, session, user_a.id)
+    detail_b = await build_session_detail(db, session, user_b.id)
+
+    assert detail_a.expires_at == detail_b.expires_at == session.expires_at
+    assert detail_a.duration_seconds == detail_b.duration_seconds == 10 * 60

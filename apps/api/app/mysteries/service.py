@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.mysteries.difficulty import MAX_DIFFICULTY, MIN_DIFFICULTY
 from app.mysteries.models import Mystery, MysteryCategoryConfig, MysteryStage
 from app.sessions.models import UserMysteryHistory
 
@@ -67,7 +68,12 @@ async def pick_random_mystery_for_pair(
     query = (
         select(Mystery)
         .options(selectinload(Mystery.stages).selectinload(MysteryStage.clues))
-        .where(Mystery.is_published.is_(True))
+        .where(
+            Mystery.is_published.is_(True),
+            # A mystery whose difficulty has no defined time limit can't be given a session
+            # end time, so it's never eligible (guards hand-edited / legacy rows).
+            Mystery.difficulty.between(MIN_DIFFICULTY, MAX_DIFFICULTY),
+        )
     )
     if cooldown_mystery_ids:
         query = query.where(Mystery.id.not_in(cooldown_mystery_ids))

@@ -18,6 +18,7 @@ import {
   useAdminUsers,
   useBanUser,
   useCategoryConfigs,
+  useDifficultyLevels,
   useGenerationStatus,
   useReviewReport,
   useSuspendUser,
@@ -27,6 +28,7 @@ import {
 } from "@/features/admin/hooks";
 import { CATEGORY_LABELS } from "@/types";
 import { formatCountdown } from "@/lib/utils";
+import { formatTimeLimit } from "@/lib/session-clock";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -271,6 +273,7 @@ function MysteriesTab() {
               <th className="p-3">Title</th>
               <th className="p-3">Category</th>
               <th className="p-3">Difficulty</th>
+              <th className="p-3">Time limit</th>
               <th className="p-3">Status</th>
               <th className="p-3">Actions</th>
             </tr>
@@ -281,6 +284,7 @@ function MysteriesTab() {
                 <td className="p-3 font-medium text-ink">{m.title}</td>
                 <td className="p-3 text-ink-muted">{CATEGORY_LABELS[m.category] ?? m.category}</td>
                 <td className="p-3 text-ink-muted">{m.difficulty}/5</td>
+                <td className="p-3 font-mono text-ink-muted">{formatTimeLimit(m.time_limit_seconds)}</td>
                 <td className="p-3">
                   <Badge variant={m.is_published ? "teal" : "default"}>{m.is_published ? "Published" : "Draft"}</Badge>
                 </td>
@@ -308,6 +312,8 @@ function CategoryPoolSection() {
   const [genCategory, setGenCategory] = useState<string>("");
   const [genAll, setGenAll] = useState(false);
   const [genQuantity, setGenQuantity] = useState(5);
+  const [genDifficulty, setGenDifficulty] = useState<string>(""); // "" = random per mystery
+  const { data: difficultyLevels } = useDifficultyLevels();
   const triggerGeneration = useTriggerGeneration();
   const { data: jobStatus } = useGenerationStatus(true);
   const isRunning = jobStatus?.status === "running";
@@ -318,6 +324,7 @@ function CategoryPoolSection() {
       category: genAll ? undefined : genCategory,
       all_categories: genAll,
       quantity: genQuantity,
+      difficulty: genDifficulty ? Number(genDifficulty) : undefined,
     });
   }
 
@@ -375,6 +382,19 @@ function CategoryPoolSection() {
                 ))}
               </select>
             )}
+            <select
+              className="h-9 rounded-lg border border-border-subtle bg-void-elevated-2 px-3 text-sm text-ink"
+              value={genDifficulty}
+              onChange={(e) => setGenDifficulty(e.target.value)}
+              aria-label="Difficulty"
+            >
+              <option value="">Any difficulty</option>
+              {difficultyLevels?.map((d) => (
+                <option key={d.difficulty} value={d.difficulty}>
+                  Difficulty {d.difficulty} · {formatTimeLimit(d.time_limit_seconds)} · {d.style}
+                </option>
+              ))}
+            </select>
             <Input
               type="number"
               min={1}

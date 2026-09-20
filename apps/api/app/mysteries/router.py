@@ -8,8 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.database import get_db
 from app.common.deps import get_current_user
 from app.common.exceptions import NotFoundError
+from app.mysteries.difficulty import DIFFICULTY_TIERS
 from app.mysteries.models import Mystery
-from app.mysteries.schemas import MysteryTeaser
+from app.mysteries.schemas import DifficultyLevelOut, MysteryTeaser
 from app.sessions.models import MysterySession
 from app.users.models import User
 
@@ -40,6 +41,22 @@ async def get_todays_mystery(user: User = Depends(get_current_user), db: AsyncSe
     mystery_result = await db.execute(select(Mystery).where(Mystery.id == session.mystery_id))
     mystery = mystery_result.scalar_one()
     return MysteryTeaser.model_validate(mystery)
+
+
+@router.get("/difficulty-levels", response_model=list[DifficultyLevelOut])
+async def list_difficulty_levels(user: User = Depends(get_current_user)):
+    """
+    The difficulty -> time-limit table straight from mysteries/difficulty.py, so
+    clients (e.g. the admin panel's difficulty picker) show real values instead
+    of keeping their own copy. Declared before "/{mystery_id}" on purpose.
+    """
+    return [
+        DifficultyLevelOut(
+            difficulty=t.level, time_limit_minutes=t.time_limit_minutes,
+            time_limit_seconds=t.time_limit_seconds, style=t.style,
+        )
+        for t in DIFFICULTY_TIERS.values()
+    ]
 
 
 @router.get("/{mystery_id}", response_model=MysteryTeaser)

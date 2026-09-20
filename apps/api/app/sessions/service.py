@@ -3,7 +3,9 @@ The authoritative core of the investigation workspace. Three rules this
 module never breaks (spec sections 14/16/17):
 
   1. The backend is the only clock that matters — expiry is checked here,
-     on access, never trusted from the client.
+     on access, never trusted from the client. A session's deadline
+     (`expires_at`) is fixed at creation from the mystery's difficulty
+     (5-30 minutes, see mysteries/difficulty.py) and never moves.
   2. A player only ever sees their OWN clue for a stage, never their
      partner's — complementary information is the entire mechanic.
   3. A session becomes terminal (SOLVED/FAILED/EXPIRED) exactly once; the
@@ -21,6 +23,7 @@ from app.chat.models import Message
 from app.common.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.common.mixins import utcnow
 from app.matchmaking.service import partner_profile_teaser
+from app.mysteries.difficulty import MAX_EXPIRING_WARNING_WINDOW, expiring_warning_window
 from app.mysteries.models import Mystery, MysteryStage
 from app.mysteries.schemas import ClueOut, MysteryDetailForSession, StageOut
 from app.mysteries.service import answer_matches
@@ -71,31 +74,59 @@ async def _get_mystery_with_stages(db: AsyncSession, mystery_id: uuid.UUID) -> M
     return result.scalar_one()
 
 
-async def ensure_not_expired(db: AsyncSession, session: MysterySession) -> MysterySession:
-    """Lazy expiry-on-access. Re-fetches with a row lock so a concurrent
-    background sweep and a live request can't both try to finalize it."""
-    if session.status not in ("ACTIVE", "WAITING"):
-        return session
-    now = datetime.now(timezone.utc)
-    if now < session.expires_at:
-        return session
+TIMES_UP_MESSAGE = "Time's up — this investigation has expired."
 
-    locked = await _load_owned_session(db, session.id, session.player_a_id, lock=True)
-    if locked.status not in ("ACTIVE", "WAITING") or now < locked.expires_at:
-        return locked
 
+def _deadline_passed(session: MysterySession, now: datetime | None = None) -> bool:
+    """True once the session's fixed end time has been reached."""
+    return (now or datetime.now(timezone.utc)) >= session.expires_at
+
+
+async def _finalize_expired(db: AsyncSession, locked: MysterySession) -> None:
+    """Moves a ROW-LOCKED, still-open session to EXPIRED — the existing timeout
+    path (no XP, streak breaks, history + memory rows, `session.expired`
+    broadcast). Commits via rewards_service.process_non_solve."""
     locked.status = "EXPIRED"
     locked.ended_at = utcnow()
     await db.flush()
     mystery = await _get_mystery_with_stages(db, locked.mystery_id)
     await rewards_service.process_non_solve(db, locked, mystery, "expired")
     await manager.broadcast(locked.id, "session.expired", {"session_id": str(locked.id)})
+
+
+async def ensure_not_expired(db: AsyncSession, session: MysterySession) -> MysterySession:
+    """Lazy expiry-on-access. Re-fetches with a row lock so a concurrent
+    background sweep and a live request can't both try to finalize it."""
+    if session.status not in ("ACTIVE", "WAITING"):
+        return session
+    now = datetime.now(timezone.utc)
+    if not _deadline_passed(session, now):
+        return session
+
+    locked = await _load_owned_session(db, session.id, session.player_a_id, lock=True)
+    if locked.status not in ("ACTIVE", "WAITING") or not _deadline_passed(locked, now):
+        return locked
+
+    await _finalize_expired(db, locked)
     return locked
 
 
+async def is_open_for_play(db: AsyncSession, session_id: uuid.UUID) -> bool:
+    """True only while the session is ACTIVE and its deadline hasn't passed.
+    Lazily expires a session that is past its deadline, so callers that don't
+    go through the REST router (the WebSocket chat) enforce the same limit."""
+    result = await db.execute(select(MysterySession).where(MysterySession.id == session_id))
+    session = result.scalar_one_or_none()
+    if session is None:
+        return False
+    session = await ensure_not_expired(db, session)
+    return session.status == "ACTIVE"
+
+
 async def sweep_expired_sessions(db: AsyncSession) -> int:
-    """Called by the background task in main.py every ~30s so `session.expired`
-    fires proactively over the WebSocket instead of only lazily on next access."""
+    """Called by the background task in main.py (every SESSION_SWEEP_INTERVAL_SECONDS)
+    so `session.expired` fires proactively over the WebSocket instead of only
+    lazily on next access."""
     now = datetime.now(timezone.utc)
     result = await db.execute(
         select(MysterySession).where(MysterySession.status == "ACTIVE", MysterySession.expires_at <= now)
@@ -106,26 +137,35 @@ async def sweep_expired_sessions(db: AsyncSession) -> int:
     return len(expired)
 
 
-async def sweep_expiring_warnings(db: AsyncSession, warning_window) -> int:
-    """Fires the one-time `session.expiring` heads-up used for the countdown's urgent-color treatment."""
+async def sweep_expiring_warnings(db: AsyncSession) -> int:
+    """Fires the one-time `session.expiring` heads-up used for the countdown's urgent-color treatment.
+
+    The warning window is a fraction of EACH session's own time limit (see
+    expiring_warning_window), so a 5-minute mystery warns at 1 minute left and a
+    30-minute one at 6. SQL only narrows to the widest window any tier can have;
+    the per-session window is then applied here. (A session created before
+    difficulty-based limits existed keeps its original long deadline and is
+    simply warned within that outer bound.)"""
     now = datetime.now(timezone.utc)
-    threshold = now + warning_window
     result = await db.execute(
         select(MysterySession).where(
             MysterySession.status == "ACTIVE",
-            MysterySession.expires_at <= threshold,
+            MysterySession.expires_at <= now + MAX_EXPIRING_WARNING_WINDOW,
             MysterySession.expires_at > now,
             MysterySession.expiring_notice_sent.is_(False),
         )
     )
-    sessions = list(result.scalars().all())
-    for session in sessions:
+    warned = 0
+    for session in result.scalars().all():
+        remaining = session.expires_at - now
+        if remaining > expiring_warning_window(session.expires_at - session.started_at):
+            continue  # inside the outer bound, but not yet inside THIS session's own window
         session.expiring_notice_sent = True
-        seconds_left = int((session.expires_at - now).total_seconds())
-        await manager.broadcast(session.id, "session.expiring", {"seconds_remaining": seconds_left})
-    if sessions:
+        await manager.broadcast(session.id, "session.expiring", {"seconds_remaining": int(remaining.total_seconds())})
+        warned += 1
+    if warned:
         await db.commit()
-    return len(sessions)
+    return warned
 
 
 def _build_stage_outs(mystery: Mystery, session: MysterySession, user_id: uuid.UUID) -> list[StageOut]:
@@ -174,13 +214,20 @@ async def build_session_detail(db: AsyncSession, session: MysterySession, user_i
 
     now = datetime.now(timezone.utc)
     seconds_remaining = max(0, int((session.expires_at - now).total_seconds()))
+    # Derived from the STORED start/end, so it stays correct for every session
+    # regardless of when it was created — and both players get identical values.
+    duration = session.expires_at - session.started_at
 
     return SessionDetailResponse(
         id=session.id, status=session.status, current_stage_number=session.current_stage_number,
         started_at=session.started_at, expires_at=session.expires_at, seconds_remaining=seconds_remaining,
+        duration_seconds=int(duration.total_seconds()),
+        expiring_warning_seconds=int(expiring_warning_window(duration).total_seconds()),
+        server_time=now,
         solved_at=session.solved_at, your_role=session.role_for(user_id),
         mystery=MysteryDetailForSession(
             id=mystery.id, title=mystery.title, category=mystery.category, difficulty=mystery.difficulty,
+            time_limit_seconds=mystery.time_limit_seconds,
             flavor_text=mystery.flavor_text, stages=_build_stage_outs(mystery, session, user_id),
         ),
         partner=partner_teaser,
@@ -191,6 +238,8 @@ async def build_session_detail(db: AsyncSession, session: MysterySession, user_i
 
 
 async def add_evidence(db: AsyncSession, session: MysterySession, user_id: uuid.UUID, payload: EvidenceCreate) -> EvidenceOut:
+    if session.status == "EXPIRED" or (session.status == "ACTIVE" and _deadline_passed(session)):
+        raise ConflictError(TIMES_UP_MESSAGE, code="session_expired")
     if session.status != "ACTIVE":
         raise ConflictError("This investigation has already ended.")
     evidence = InvestigationEvidence(
@@ -214,6 +263,15 @@ async def list_messages(db: AsyncSession, session_id: uuid.UUID) -> list[Message
 async def submit_answer(db: AsyncSession, session: MysterySession, user_id: uuid.UUID, answer_text: str) -> AnswerSubmitResponse:
     locked_session = await _load_owned_session(db, session.id, user_id, lock=True)
 
+    # The router's ensure_not_expired ran BEFORE this row lock was taken. On a
+    # 5-30 minute clock the deadline can pass in between, so it's re-checked
+    # here, under the lock, where nothing else can change the session — a
+    # correct answer that arrives after time is up is never scored.
+    if locked_session.status in ("ACTIVE", "WAITING") and _deadline_passed(locked_session):
+        await _finalize_expired(db, locked_session)
+        raise ConflictError(TIMES_UP_MESSAGE, code="session_expired")
+    if locked_session.status == "EXPIRED":
+        raise ConflictError(TIMES_UP_MESSAGE, code="session_expired")
     if locked_session.status != "ACTIVE":
         raise ConflictError("This investigation has already ended.")
 

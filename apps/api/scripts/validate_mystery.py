@@ -31,6 +31,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import get_settings
+from app.mysteries.difficulty import get_difficulty_tier
 from app.mysteries.models import MYSTERY_CATEGORIES, Mystery
 from app.mysteries.schemas import MysteryCandidate
 from app.mysteries.service import normalize_answer
@@ -170,7 +171,8 @@ strangers are matched together and each gets ONE of the two clues below for this
 other's clue. They must combine what they each see, by describing it to each other in chat, to arrive at the answer.
 
 Category: {category}
-Difficulty (1=gentle, 5=brutal): {difficulty}
+Difficulty (1=gentle, 5=brutal): {difficulty} — {difficulty_style}
+Time limit for the WHOLE mystery (all stages together): {time_limit_minutes} minutes
 Stage context: {context}
 Clue A (shown only to player A): {clue_a}
 Clue B (shown only to player B): {clue_b}
@@ -179,9 +181,9 @@ Expected answer(s): {answers}
 Judge this stage against ALL of these criteria:
 1. SOLVABLE: a reasonable person combining both clues could actually arrive at the answer.
 2. GENUINELY COMPLEMENTARY: clue A alone is not enough to guess the answer, and neither is clue B alone.
-3. NOT MISLEADING: nothing in either clue points to a different, equally plausible wrong answer.
+3. NOT MISLEADING: nothing in either clue points to a different, equally plausible wrong answer once both clues are combined. (A hard mystery may use deliberate red herrings or indirect wording, but the combined clues must still single out exactly ONE answer.)
 4. APPROPRIATE: nothing sexual, hateful, violent, or otherwise inappropriate for a general audience.
-5. DIFFICULTY MATCH: roughly matches the stated difficulty level.
+5. DIFFICULTY & TIME MATCH: roughly matches the stated difficulty level, and two strangers chatting could realistically solve the whole mystery within the time limit.
 
 Respond with ONLY a JSON object, no other text, in exactly this shape:
 {{"confidence": <integer 0-100, how confident you are this stage is high quality and meets all 5 criteria>, \
@@ -218,8 +220,10 @@ async def validate_semantics(candidate: MysteryCandidate, api_key: str, model: s
         clue_a = next(c.text for c in stage.clues if c.role == "player_a")
         clue_b = next(c.text for c in stage.clues if c.role == "player_b")
         answers = candidate.final_answer_patterns if stage.is_final else (stage.checkpoint_answer_patterns or [])
+        tier = get_difficulty_tier(candidate.difficulty)
         prompt = SEMANTIC_VALIDATION_PROMPT.format(
             category=candidate.category, difficulty=candidate.difficulty,
+            difficulty_style=tier.style, time_limit_minutes=tier.time_limit_minutes,
             context=stage.context or "(none given)", clue_a=clue_a, clue_b=clue_b, answers=", ".join(answers),
         )
         try:

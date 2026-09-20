@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.mysteries.difficulty import MAX_DIFFICULTY, MIN_DIFFICULTY
+
 
 class AdminUserOut(BaseModel):
     id: uuid.UUID
@@ -85,7 +87,7 @@ class GenerateMysteriesRequest(BaseModel):
     category: str | None = None  # None + all_categories=True means every category
     all_categories: bool = False
     quantity: int = Field(default=5, ge=1, le=50)
-    difficulty: int | None = Field(default=None, ge=1, le=5)
+    difficulty: int | None = Field(default=None, ge=MIN_DIFFICULTY, le=MAX_DIFFICULTY)
 
 
 class GenerationJobStatusOut(BaseModel):

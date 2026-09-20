@@ -33,6 +33,7 @@ from sqlalchemy.orm import selectinload
 
 from app.common.database import AsyncSessionLocal
 from app.config.settings import get_settings
+from app.mysteries.difficulty import DIFFICULTY_TIERS, MAX_DIFFICULTY, MIN_DIFFICULTY, get_difficulty_tier
 from app.mysteries.models import MYSTERY_CATEGORIES, Mystery, MysteryClue, MysteryStage
 from app.mysteries.schemas import MysteryCandidate
 from scripts.validate_mystery import _call_anthropic, _extract_json, validate_mystery
@@ -59,7 +60,10 @@ and each gets ONE of two complementary clues to a mystery. Neither alone is enou
 see to each other in chat to combine them and reach the answer.
 
 Generate exactly ONE new mystery in the "{category}" category, at difficulty {difficulty} (1=gentle, 5=brutal). \
-This category is about {category_guidance}.
+Difficulty {difficulty} means: {difficulty_style}. The pair gets a hard time limit of {time_limit_minutes} minutes to \
+solve the WHOLE mystery together in chat, so it must be genuinely solvable in that time. If the style involves \
+misleading or indirect clues, use red herrings and indirect phrasing sparingly — the two clues combined must still \
+point to exactly ONE answer. This category is about {category_guidance}.
 
 Here is a real, already-published example from this exact game, to show you the tone, format, and complementary-\
 clue mechanic (do NOT reuse this example's content — write something entirely new):
@@ -130,8 +134,10 @@ async def _fetch_example(db: AsyncSession, category: str) -> str:
 
 async def generate_one_candidate(db: AsyncSession, category: str, difficulty: int) -> dict:
     example = await _fetch_example(db, category)
+    tier = get_difficulty_tier(difficulty)
     prompt = GENERATION_PROMPT_TEMPLATE.format(
         category=category, difficulty=difficulty,
+        difficulty_style=tier.style, time_limit_minutes=tier.time_limit_minutes,
         category_guidance=CATEGORY_GUIDANCE.get(category, "an original puzzle concept"), example=example,
     )
     raw_response = await _call_anthropic(prompt, settings.ANTHROPIC_API_KEY, settings.MYSTERY_GENERATOR_MODEL)
@@ -177,7 +183,7 @@ async def generate_for_category(
     max_total_attempts = quantity * MAX_ATTEMPTS_PER_MYSTERY
     while saved < quantity and stats["attempts"] < max_total_attempts:
         stats["attempts"] += 1
-        this_difficulty = difficulty or random.randint(1, 5)
+        this_difficulty = difficulty or random.randint(MIN_DIFFICULTY, MAX_DIFFICULTY)
         try:
             raw = await generate_one_candidate(db, category, this_difficulty)
         except Exception as exc:  # noqa: BLE001 — one bad call must not kill the whole batch
@@ -220,7 +226,7 @@ async def main() -> None:
     parser.add_argument("--category", choices=MYSTERY_CATEGORIES, help="Generate for one specific category.")
     parser.add_argument("--all-categories", action="store_true", help="Generate for every category in MYSTERY_CATEGORIES.")
     parser.add_argument("--quantity", type=int, default=5, help="How many VALID mysteries to save per category (default 5).")
-    parser.add_argument("--difficulty", type=int, choices=[1, 2, 3, 4, 5], help="Fix difficulty instead of randomizing per mystery.")
+    parser.add_argument("--difficulty", type=int, choices=sorted(DIFFICULTY_TIERS), help="Fix difficulty instead of randomizing per mystery.")
     parser.add_argument("--dry-run", action="store_true", help="Generate and validate but save nothing.")
     args = parser.parse_args()
 

@@ -1,6 +1,7 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
+import type { DifficultyLevel } from "@/types";
 
 export interface AdminUser {
   id: string;
@@ -29,6 +30,8 @@ export interface AdminMystery {
   title: string;
   category: string;
   difficulty: number;
+  /** Derived server-side from `difficulty` (apps/api/app/mysteries/difficulty.py) — never computed here. */
+  time_limit_seconds: number | null;
   summary: string;
   is_published: boolean;
   stage_count: number;
@@ -161,6 +164,15 @@ export function useGenerationStatus(enabled: boolean) {
     queryFn: () => api.get<GenerationJobStatus>("/admin/mysteries/generate/status"),
     enabled,
     refetchInterval: (query) => (query.state.data?.status === "running" ? 2000 : false),
+  });
+}
+
+/** The backend's difficulty -> time-limit table, so pickers show real values instead of a copy kept in the UI. */
+export function useDifficultyLevels() {
+  return useQuery({
+    queryKey: ["mysteries", "difficulty-levels"],
+    queryFn: () => api.get<DifficultyLevel[]>("/mysteries/difficulty-levels"),
+    staleTime: 60 * 60 * 1000, // static product config
   });
 }
 

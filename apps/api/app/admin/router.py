@@ -78,6 +78,7 @@ async def list_mysteries(category: str | None = None, admin: User = Depends(get_
     return [
         MysteryAdminOut(
             id=m.id, title=m.title, category=m.category, difficulty=m.difficulty,
+            time_limit_seconds=m.time_limit_seconds,
             summary=m.summary, is_published=m.is_published, stage_count=len(m.stages),
         )
         for m in mysteries
@@ -87,13 +88,13 @@ async def list_mysteries(category: str | None = None, admin: User = Depends(get_
 @router.post("/mysteries", response_model=MysteryAdminOut, status_code=201)
 async def create_mystery(payload: MysteryCreate, admin: User = Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
     m = await service.create_mystery(db, admin.id, payload)
-    return MysteryAdminOut(id=m.id, title=m.title, category=m.category, difficulty=m.difficulty, summary=m.summary, is_published=m.is_published, stage_count=len(payload.stages))
+    return MysteryAdminOut(id=m.id, title=m.title, category=m.category, difficulty=m.difficulty, time_limit_seconds=m.time_limit_seconds, summary=m.summary, is_published=m.is_published, stage_count=len(payload.stages))
 
 
 @router.patch("/mysteries/{mystery_id}", response_model=MysteryAdminOut)
 async def update_mystery(mystery_id: uuid.UUID, payload: MysteryUpdate, admin: User = Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
     m = await service.update_mystery(db, mystery_id, payload)
-    return MysteryAdminOut(id=m.id, title=m.title, category=m.category, difficulty=m.difficulty, summary=m.summary, is_published=m.is_published)
+    return MysteryAdminOut(id=m.id, title=m.title, category=m.category, difficulty=m.difficulty, time_limit_seconds=m.time_limit_seconds, summary=m.summary, is_published=m.is_published)
 
 
 @router.post("/mysteries/{mystery_id}/publish")

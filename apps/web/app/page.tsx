@@ -26,7 +26,7 @@ const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>
 const STEPS = [
   {
     title: "You arrive for the day",
-    body: "Once every 24 hours, Pairza has something waiting for you — no feed, no scrolling, just one door in.",
+    body: "Every day, Pairza has something waiting for you — no feed, no scrolling, just one door in.",
   },
   {
     title: "We pair you with a stranger",
@@ -38,7 +38,7 @@ const STEPS = [
   },
   {
     title: "Solve it before the connection closes",
-    body: "You have 24 hours together. Then the case closes, solved or not — and tomorrow, a new door opens.",
+    body: "The clock starts the moment you're paired — and the harder the mystery, the more time you get. When it hits zero, the case closes, solved or not.",
   },
 ];
 
@@ -131,7 +131,7 @@ export default function LandingPage() {
             className="mx-auto mt-6 max-w-xl text-lg text-ink-muted text-balance"
           >
             Every day, Pairza pairs you with someone new, somewhere in the world. You each hold half a mystery.
-            Together, for 24 hours only, you have to solve it.
+            Together, against the clock, you have to solve it.
           </motion.p>
 
           <motion.div

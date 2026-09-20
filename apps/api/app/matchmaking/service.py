@@ -23,6 +23,7 @@ from app.common.redis_client import RedisKeys
 from app.config.settings import get_settings
 from app.matchmaking.models import Match, MatchHistory
 from app.moderation.models import Block
+from app.mysteries.difficulty import session_end_time
 from app.mysteries.service import pick_random_mystery_for_pair, recent_mystery_ids_for_user
 from app.sessions.models import MysterySession
 from app.users.models import Profile, User
@@ -164,7 +165,7 @@ async def join_matchmaking(db: AsyncSession, redis: Redis, user: User) -> dict:
             status="ACTIVE",
             current_stage_number=1,
             started_at=now,
-            expires_at=now + timedelta(hours=settings.SESSION_DURATION_HOURS),
+            expires_at=session_end_time(now, mystery.difficulty),  # 5-30 min, by difficulty
         )
         db.add(session)
 

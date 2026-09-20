@@ -2,9 +2,20 @@
 
 **One stranger. One mystery. One chance.**
 
-Every 24 hours, Pairza randomly pairs a user with one other person, somewhere in the world, and gives each of them
-half the clues to a mystery. Neither can solve it alone. The connection expires in 24 hours whether they solve it
-or not.
+Pairza randomly pairs a user with one other person, somewhere in the world, and gives each of them half the clues
+to a mystery. Neither can solve it alone. The clock starts the moment they're paired, and the connection expires
+when it runs out — whether they've solved it or not. How long they get depends on how hard the mystery is:
+
+| Difficulty | Time limit | Challenge style             |
+| ---------: | ---------: | --------------------------- |
+|          1 |  5 minutes | Straightforward clues       |
+|          2 | 10 minutes | Requires discussion         |
+|          3 | 15 minutes | Multiple connected clues    |
+|          4 | 20 minutes | Misleading / indirect clues |
+|          5 | 30 minutes | Complex deduction           |
+
+These numbers live in exactly one place — [`apps/api/app/mysteries/difficulty.py`](apps/api/app/mysteries/difficulty.py) —
+see [Difficulty & time limits](#difficulty--time-limits) below.
 
 This is a real, working full-stack implementation — not a mockup. Real PostgreSQL, real Redis, real WebSocket chat,
 a real matchmaking engine with an automated test suite, and a real Next.js frontend, all wired together.
@@ -20,8 +31,9 @@ a real matchmaking engine with an automated test suite, and a real Next.js front
   two matched users always get the same mystery with genuinely different, complementary clues.
 - The mystery engine: multi-stage mysteries with per-stage checkpoint answers and a final answer, each stage holding
   two different clues (`player_a` / `player_b`) that are never both shown to the same person.
-- Session lifecycle with **backend-authoritative expiry** — a background sweeper plus lazy-check-on-access, so a
-  client can never submit a correct answer after time is up, and a manipulated client clock can't extend anything.
+- Session lifecycle with **backend-authoritative expiry** — a background sweeper plus lazy-check-on-access (and a
+  re-check under the row lock on every answer, plus on every WebSocket chat message), so a client can never submit
+  a correct answer or send a message after time is up, and a manipulated client clock can't extend anything.
 - Real-time chat over WebSockets: presence, typing indicators, distinct system/discovery/normal message types, a
   short-lived single-use ticket auth scheme (so the long-lived access token, correctly httpOnly, never has to be
   exposed to JS or put in a URL).
@@ -32,8 +44,8 @@ a real matchmaking engine with an automated test suite, and a real Next.js front
 - Admin: user suspend/ban, mystery CRUD + publish workflow, report review queue, category enable/disable, a
   real AI-backed mystery generation pipeline (see below), and an analytics endpoint (DAU/MAU/retention, matches
   and completions per user, average session length).
-- **42 passing automated tests** against a real Postgres + Redis instance (see `apps/api/tests/`) covering every
-  invariant above, not mocks.
+- **71 automated test functions** written against a real Postgres + Redis instance (see `apps/api/tests/`)
+  covering every invariant above, not mocks. Run them with `pytest -v` from `apps/api`.
 
 **Frontend (Next.js 16 + React 19 + Tailwind v4) — fully functional:**
 - Landing page, auth, the daily home screen, the cinematic mystery-reveal sequence, the investigation workspace
@@ -58,10 +70,12 @@ completely real, with the architecture built to extend cleanly:
 - **Creator/UGC system**: intentionally not built — the spec itself flags this as post-MVP.
 - **Frontend automated tests**: the backend has full test coverage; the frontend was verified via a real production
   build + manual end-to-end smoke testing (login, matchmaking, chat, all working through the actual proxy/cookie
-  architecture), but doesn't yet have a Vitest/Playwright suite.
-- **"One mystery per calendar day"**: there's no hard midnight reset. The 24-hour session window *is* the pacing
-  mechanism — once your session ends, you're free to look for the next one immediately. This felt truer to the
-  product than adding artificial calendar-day gating the spec didn't fully define.
+  architecture), but doesn't yet have a Vitest/Playwright suite. The one exception is the countdown's timing math,
+  which lives in a dependency-free module with its own `node --test` suite (`npm test` in `apps/web`, Node 22.6+).
+- **"One mystery per calendar day"**: there's no hard midnight reset and no daily cap. Once your session ends
+  (solved, or its time limit runs out), you're free to look for the next one immediately; the match and mystery
+  cooldowns are what keep repeats away. This felt truer to the product than adding artificial calendar-day gating
+  the spec didn't fully define.
 - **AI mystery generation**: the full three-stage pipeline (structural → duplicate → semantic validation) is real
   and tested, but two things inside it are deliberately simpler than a production version might warrant —
   duplicate detection is exact-normalized-text matching, not embedding-based semantic similarity (would catch
@@ -71,6 +85,29 @@ completely real, with the architecture built to extend cleanly:
   extending either doesn't require touching matchmaking, sessions, or the validation pipeline's structure.
 
 None of this is hidden inside the code — search for scope-decision comments if you want the reasoning inline.
+
+## Difficulty & time limits
+
+A mystery's `difficulty` (1–5) decides how long a pair has to solve it — see the table at the top. The single source
+of truth is `apps/api/app/mysteries/difficulty.py`; **to change a duration, edit `_TIERS` there and nothing else.**
+Everything below reads from it instead of restating the numbers:
+
+- **Session start** — matchmaking sets `expires_at = started_at + time_limit(mystery.difficulty)` once, when the
+  session is created. It is stored, never recomputed, so it can't drift and a page refresh can't reset it.
+- **API** — `GET /api/sessions/{id}` returns `expires_at`, `duration_seconds`, `expiring_warning_seconds` and
+  `server_time`; mysteries carry `time_limit_seconds`; `GET /api/mysteries/difficulty-levels` returns the whole table.
+- **Frontend** — the countdown never keeps its own duration. It counts down to the server's `expires_at`, using
+  `server_time` to correct for the device clock, so both players see the same remaining time (to within network
+  latency) and a wrong device clock can't skew it. At zero the workspace locks immediately and re-syncs with the server.
+- **Enforcement** — answers, evidence and chat are all refused once the deadline passes, and the session moves to
+  `EXPIRED` through the existing timeout path (no XP, streak breaks, history + Memory Vault entries).
+- **Validation** — every schema that accepts a difficulty (`MysteryCreate`, `MysteryUpdate`, the AI candidate, the
+  generate request) uses the same `MIN_DIFFICULTY`/`MAX_DIFFICULTY`. The AI generator and its semantic reviewer are
+  told the time limit, so they aim for puzzles that are solvable in it.
+- **"Expiring soon"** — fires when the last fifth of a session's own time is left (1 min of 5, 6 min of 30).
+
+Sessions that were already in progress when this shipped keep the end time they were created with (up to 24 hours)
+and finish normally; no data migration is involved.
 
 ## Quick start (Docker — recommended)
 
@@ -189,7 +226,7 @@ pairza/
 │   │   │   └── common/          # db, redis, security, shared deps
 │   │   ├── alembic/             # migrations
 │   │   ├── scripts/             # seed.py (demo data), generate_mysteries.py + validate_mystery.py (AI pipeline)
-│   │   └── tests/               # 27 tests, real Postgres + Redis
+│   │   └── tests/               # 71 test functions, real Postgres + Redis
 │   └── web/                     # Next.js frontend
 │       ├── app/                 # routes (landing, auth, home, mystery, vault, profile, admin)
 │       ├── components/          # UI primitives + feature components

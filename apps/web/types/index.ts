@@ -36,7 +36,17 @@ export interface MysteryTeaser {
   id: string;
   category: string;
   difficulty: number;
+  /** Derived server-side from `difficulty` — never computed in the browser. */
+  time_limit_seconds: number | null;
   summary: string;
+}
+
+/** One row of the backend's difficulty -> time-limit table (GET /mysteries/difficulty-levels). */
+export interface DifficultyLevel {
+  difficulty: number;
+  time_limit_minutes: number;
+  time_limit_seconds: number;
+  style: string;
 }
 
 export interface Clue {
@@ -59,6 +69,8 @@ export interface MysteryDetail {
   title: string;
   category: string;
   difficulty: number;
+  /** Derived server-side from `difficulty` — never computed in the browser. */
+  time_limit_seconds: number | null;
   flavor_text: string | null;
   stages: Stage[];
 }
@@ -87,8 +99,15 @@ export interface SessionDetail {
   status: SessionStatus;
   current_stage_number: number;
   started_at: string;
+  /** The fixed deadline. The countdown counts down to this, corrected by `server_time`. */
   expires_at: string;
   seconds_remaining: number;
+  /** Total time limit for this session (expires_at - started_at). */
+  duration_seconds: number;
+  /** When the UI should switch to its urgent styling (also when `session.expiring` fires). */
+  expiring_warning_seconds: number;
+  /** The server's clock when it built this response — used to correct for the device clock. */
+  server_time: string;
   solved_at: string | null;
   your_role: string;
   mystery: MysteryDetail;

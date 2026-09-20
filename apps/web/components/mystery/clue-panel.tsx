@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { SessionDetail } from "@/types";
 import { useSubmitAnswer } from "@/features/session/hooks";
+import { ApiError } from "@/lib/api-client";
+import { formatTimeLimit } from "@/lib/session-clock";
 import { toast } from "sonner";
 
 const DIFFICULTY_LABELS = ["", "Gentle", "Easy", "Moderate", "Hard", "Brutal"];
@@ -34,8 +36,13 @@ export function CluePanel({ session }: { session: SessionDetail }) {
         setLastWrong(true);
         setAnswer("");
       }
-    } catch {
-      toast.error("Couldn't submit that answer. Try again.");
+    } catch (err) {
+      // The server refuses anything after the deadline; say so plainly instead of a generic retry prompt.
+      if (err instanceof ApiError && err.code === "session_expired") {
+        toast.error("Time's up — this investigation has expired.");
+      } else {
+        toast.error("Couldn't submit that answer. Try again.");
+      }
     }
   }
 
@@ -55,7 +62,9 @@ export function CluePanel({ session }: { session: SessionDetail }) {
               className={`h-1.5 w-1.5 rounded-full ${i <= session.mystery.difficulty ? "bg-signal-violet" : "bg-white/10"}`}
             />
           ))}
-          <span className="ml-1.5 text-xs text-ink-faint">{DIFFICULTY_LABELS[session.mystery.difficulty]}</span>
+          <span className="ml-1.5 text-xs text-ink-faint">
+            {DIFFICULTY_LABELS[session.mystery.difficulty]} · {formatTimeLimit(session.mystery.time_limit_seconds)} limit
+          </span>
         </div>
       </div>
 
@@ -137,7 +146,7 @@ function TerminalBanner({ session }: { session: SessionDetail }) {
     <div className="rounded-2xl border border-urgent-coral/30 bg-urgent-coral-dim p-5 text-center">
       <XCircle className="mx-auto mb-2 h-6 w-6 text-urgent-coral" />
       <p className="font-display font-semibold text-ink">
-        {isExpired ? "The connection expired." : "This investigation ended early."}
+        {isExpired ? "Time's up — the connection expired." : "This investigation ended early."}
       </p>
       <p className="mt-1 text-sm text-ink-muted">A new one will be waiting for you.</p>
     </div>

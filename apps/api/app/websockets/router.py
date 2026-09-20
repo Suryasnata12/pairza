@@ -18,6 +18,7 @@ from app.common.mixins import utcnow
 from app.common.redis_client import RedisKeys, get_redis
 from app.common.security import TokenType, decode_token
 from app.config.settings import get_settings
+from app.sessions import service as sessions_service
 from app.sessions.models import MysterySession
 from app.websockets.manager import manager
 
@@ -58,6 +59,7 @@ async def session_socket(
         if session is None or session.role_for(user_id) is None:
             await websocket.close(code=4403)
             return
+        session = await sessions_service.ensure_not_expired(db, session)  # settles a session that is past its deadline
         if session.status not in ("ACTIVE", "WAITING"):
             await websocket.close(code=4409)
             return
@@ -114,6 +116,11 @@ async def session_socket(
                     continue
 
                 async with AsyncSessionLocal() as db:
+                    # A socket opened before the deadline stays connected after it, so the
+                    # time limit is re-checked for every message, not just at connect.
+                    if not await sessions_service.is_open_for_play(db, session_id):
+                        await manager.send_to_user(session_id, user_id, "error", {"message": "Time's up — this investigation has ended."})
+                        continue
                     msg = await chat_service.create_message(db, session_id, user_id, "normal", content)
 
                 await manager.broadcast(session_id, "message.created", {

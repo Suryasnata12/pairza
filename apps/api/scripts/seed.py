@@ -24,6 +24,7 @@ from app.common.mixins import utcnow
 from app.common.security import hash_password
 from app.config.settings import get_settings
 from app.matchmaking.models import Match, MatchHistory
+from app.mysteries.difficulty import time_limit_for_difficulty
 from app.mysteries.models import MYSTERY_CATEGORIES, Mystery, MysteryCategoryConfig, MysteryClue, MysteryStage
 from app.rewards.models import Badge
 from app.sessions.models import MysterySession, UserMysteryHistory
@@ -363,22 +364,29 @@ async def seed_historical_engagement(db) -> None:
             db.add(MatchHistory(user_id=user_a_id, matched_with_user_id=user_b_id, match_id=match.id, created_at=match_time))
             db.add(MatchHistory(user_id=user_b_id, matched_with_user_id=user_a_id, match_id=match.id, created_at=match_time))
 
-            duration = timedelta(seconds=random.randint(180, 6 * 3600))
-            ended_at = match_time + duration
+            # Every backfilled outcome respects the mystery's real time limit (difficulty-based,
+            # mysteries/difficulty.py): solves land inside the window, and an EXPIRED session
+            # ran the full clock down — exactly what production data looks like.
+            time_limit = time_limit_for_difficulty(mystery.difficulty)
+            limit_seconds = int(time_limit.total_seconds())
             roll = random.random()
             if roll < 0.68:
                 status, result = "SOLVED", "solved"
+                duration = timedelta(seconds=random.randint(int(limit_seconds * 0.15), int(limit_seconds * 0.95)))
             elif roll < 0.85:
                 status, result = "EXPIRED", "expired"
+                duration = time_limit
             else:
                 status, result = "FAILED", "failed"
+                duration = timedelta(seconds=random.randint(int(limit_seconds * 0.30), int(limit_seconds * 0.90)))
+            ended_at = match_time + duration
 
             final_stage_number = max((s.stage_number for s in mystery.stages), default=1)
             session = MysterySession(
                 match_id=match.id, mystery_id=mystery.id, player_a_id=user_a_id, player_b_id=user_b_id,
                 status=status,
                 current_stage_number=final_stage_number if status == "SOLVED" else random.randint(1, final_stage_number),
-                started_at=match_time, expires_at=match_time + timedelta(hours=24),
+                started_at=match_time, expires_at=match_time + time_limit,
                 solved_at=ended_at if status == "SOLVED" else None, ended_at=ended_at,
             )
             db.add(session)

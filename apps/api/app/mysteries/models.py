@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.database import Base
 from app.common.mixins import TimestampMixin, UUIDPrimaryKeyMixin, utcnow
+from app.mysteries.difficulty import find_difficulty_tier
 
 # Registry of mystery categories (spec section 12). Adding a new category is
 # a one-line addition here plus content — it never requires touching
@@ -45,7 +46,7 @@ class Mystery(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     title: Mapped[str] = mapped_column(String(200))
     category: Mapped[str] = mapped_column(String(32), index=True)
-    difficulty: Mapped[int] = mapped_column(Integer, default=1)  # 1-5, rendered as dots in the UI
+    difficulty: Mapped[int] = mapped_column(Integer, default=1)  # 1-5, rendered as dots in the UI; also sets the time limit (mysteries/difficulty.py)
     summary: Mapped[str] = mapped_column(Text)  # short, spoiler-free teaser shown before reveal
     flavor_text: Mapped[str | None] = mapped_column(Text, nullable=True)  # shown during reveal animation
 
@@ -65,6 +66,12 @@ class Mystery(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     stages: Mapped[list["MysteryStage"]] = relationship(
         back_populates="mystery", cascade="all, delete-orphan", order_by="MysteryStage.stage_number"
     )
+
+    @property
+    def time_limit_seconds(self) -> int | None:
+        """Gameplay time limit implied by `difficulty` (None only for a row with an out-of-range difficulty)."""
+        tier = find_difficulty_tier(self.difficulty)
+        return tier.time_limit_seconds if tier else None
 
 
 class MysteryCategoryConfig(Base, UUIDPrimaryKeyMixin):

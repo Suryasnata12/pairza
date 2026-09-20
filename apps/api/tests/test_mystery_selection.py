@@ -96,3 +96,18 @@ async def test_diversity_preference_falls_back_when_only_recent_category_availab
     mystery = await mysteries_service.pick_random_mystery_for_pair(db, user_a.id, user_b.id, {geo_mystery_1.id})
     assert mystery is not None
     assert mystery.id == geo_mystery_2.id
+
+
+async def test_mystery_with_no_defined_time_limit_is_never_selected(db):
+    """A session's end time comes from the mystery's difficulty, so a row whose difficulty is outside
+    the defined tiers (only possible via hand-edited data) must be skipped, not crash matchmaking."""
+    await make_mystery(db, title="Bad Difficulty", category="geo", difficulty=9)
+    user_a = await make_user(db, "baddiff_a@test.com", "baddiff_a")
+    user_b = await make_user(db, "baddiff_b@test.com", "baddiff_b")
+
+    assert await mysteries_service.pick_random_mystery_for_pair(db, user_a.id, user_b.id, set()) is None
+
+    await make_mystery(db, title="Good Difficulty", category="cipher", difficulty=5)
+    for _ in range(10):
+        mystery = await mysteries_service.pick_random_mystery_for_pair(db, user_a.id, user_b.id, set())
+        assert mystery is not None and mystery.title == "Good Difficulty"

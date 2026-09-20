@@ -8,8 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { formatRelativeTime } from "@/lib/utils";
 import { useAddEvidence } from "@/features/session/hooks";
+import { ApiError } from "@/lib/api-client";
 import type { SessionDetail } from "@/types";
 import { useAuthStore } from "@/stores/use-auth-store";
+import { toast } from "sonner";
 
 export function EvidencePanel({ session }: { session: SessionDetail }) {
   const me = useAuthStore((s) => s.me);
@@ -22,10 +24,18 @@ export function EvidencePanel({ session }: { session: SessionDetail }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim() || !content.trim()) return;
-    await addEvidence.mutateAsync({ title: title.trim(), content: content.trim() });
-    setTitle("");
-    setContent("");
-    setOpen(false);
+    try {
+      await addEvidence.mutateAsync({ title: title.trim(), content: content.trim() });
+      setTitle("");
+      setContent("");
+      setOpen(false);
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError && err.code === "session_expired"
+          ? "Time's up — this investigation has expired."
+          : "Couldn't pin that evidence. Try again."
+      );
+    }
   }
 
   return (

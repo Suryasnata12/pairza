@@ -2,6 +2,8 @@ import uuid
 
 from pydantic import BaseModel, Field
 
+from app.mysteries.difficulty import MAX_DIFFICULTY, MIN_DIFFICULTY
+
 
 class MysteryTeaser(BaseModel):
     """What a player sees on the Home screen BEFORE entering — no clue, no answer, no spoilers."""
@@ -10,6 +12,7 @@ class MysteryTeaser(BaseModel):
     category: str
     difficulty: int
     summary: str
+    time_limit_seconds: int | None = None  # derived from difficulty — see mysteries/difficulty.py
 
     model_config = {"from_attributes": True}
 
@@ -40,6 +43,7 @@ class MysteryDetailForSession(BaseModel):
     title: str
     category: str
     difficulty: int
+    time_limit_seconds: int | None = None  # derived from difficulty — see mysteries/difficulty.py
     flavor_text: str | None
     stages: list[StageOut]
 
@@ -63,7 +67,7 @@ class StageIn(BaseModel):
 class MysteryCreate(BaseModel):
     title: str
     category: str
-    difficulty: int = Field(ge=1, le=5)
+    difficulty: int = Field(ge=MIN_DIFFICULTY, le=MAX_DIFFICULTY)
     summary: str
     flavor_text: str | None = None
     final_answer_patterns: list[str]
@@ -72,7 +76,7 @@ class MysteryCreate(BaseModel):
 
 class MysteryUpdate(BaseModel):
     title: str | None = None
-    difficulty: int | None = Field(default=None, ge=1, le=5)
+    difficulty: int | None = Field(default=None, ge=MIN_DIFFICULTY, le=MAX_DIFFICULTY)
     summary: str | None = None
     flavor_text: str | None = None
     final_answer_patterns: list[str] | None = None
@@ -84,11 +88,21 @@ class MysteryAdminOut(BaseModel):
     title: str
     category: str
     difficulty: int
+    time_limit_seconds: int | None = None  # derived from difficulty — see mysteries/difficulty.py
     summary: str
     is_published: bool
     stage_count: int = 0
 
     model_config = {"from_attributes": True}
+
+
+class DifficultyLevelOut(BaseModel):
+    """One row of the difficulty -> time-limit table, so no client ever has to hard-code it."""
+
+    difficulty: int
+    time_limit_minutes: int
+    time_limit_seconds: int
+    style: str
 
 
 # --- AI generation pipeline (scripts/generate_mysteries.py, scripts/validate_mystery.py) ---
@@ -117,7 +131,7 @@ class MysteryCandidate(BaseModel):
 
     title: str = Field(min_length=3, max_length=200)
     category: str
-    difficulty: int = Field(ge=1, le=5)
+    difficulty: int = Field(ge=MIN_DIFFICULTY, le=MAX_DIFFICULTY)
     summary: str = Field(min_length=10, max_length=400)
     flavor_text: str | None = Field(default=None, max_length=400)
     final_answer_patterns: list[str] = Field(min_length=1, max_length=8)

@@ -40,6 +40,12 @@ class SessionDetailResponse(BaseModel):
     started_at: datetime
     expires_at: datetime
     seconds_remaining: int
+    # Timer contract for clients: count down to `expires_at`, using `server_time` to correct for
+    # the device clock. `duration_seconds` is the total time limit (expires_at - started_at) and
+    # `expiring_warning_seconds` is when the UI should switch to its urgent styling.
+    duration_seconds: int
+    expiring_warning_seconds: int
+    server_time: datetime
     solved_at: datetime | None
     your_role: str
     mystery: MysteryDetailForSession

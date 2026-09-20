@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from datetime import timedelta
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,7 +24,6 @@ from app.websockets.router import router as websockets_router
 settings = get_settings()
 logger = logging.getLogger("pairza")
 
-SWEEP_INTERVAL_SECONDS = 30
 
 
 async def _background_sweeper() -> None:
@@ -38,12 +36,10 @@ async def _background_sweeper() -> None:
             async with AsyncSessionLocal() as db:
                 await sessions_service.sweep_expired_sessions(db)
             async with AsyncSessionLocal() as db:
-                await sessions_service.sweep_expiring_warnings(
-                    db, timedelta(minutes=settings.SESSION_EXPIRING_WARNING_MINUTES)
-                )
+                await sessions_service.sweep_expiring_warnings(db)
         except Exception:  # noqa: BLE001 — a bad sweep must never kill the loop
             logger.exception("background sweep failed")
-        await asyncio.sleep(SWEEP_INTERVAL_SECONDS)
+        await asyncio.sleep(settings.SESSION_SWEEP_INTERVAL_SECONDS)
 
 
 @asynccontextmanager

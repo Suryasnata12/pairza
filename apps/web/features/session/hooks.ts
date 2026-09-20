@@ -29,6 +29,8 @@ export function useSubmitAnswer(sessionId: string) {
       queryClient.invalidateQueries({ queryKey: ["session", "current"] });
       queryClient.invalidateQueries({ queryKey: ["users", "me"] });
     },
+    // A refused answer (e.g. 409 "session_expired") means the server's view of the session changed — re-sync it.
+    onError: () => queryClient.invalidateQueries({ queryKey: ["session"] }),
   });
 }
 
@@ -40,5 +42,6 @@ export function useAddEvidence(sessionId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["session", sessionId] });
     },
+    onError: () => queryClient.invalidateQueries({ queryKey: ["session"] }),
   });
 }

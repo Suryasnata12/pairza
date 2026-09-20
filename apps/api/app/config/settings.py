@@ -43,8 +43,15 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
 
     # --- Session / game rules ---
-    SESSION_DURATION_HOURS: int = 24
-    SESSION_EXPIRING_WARNING_MINUTES: int = 60
+    # A session's LENGTH is not configured here — it's derived from the
+    # mystery's difficulty (see app/mysteries/difficulty.py). Old
+    # SESSION_DURATION_HOURS / SESSION_EXPIRING_WARNING_MINUTES values left in
+    # an existing .env are simply ignored.
+    #
+    # How often the background sweeper looks for sessions that just ran out of
+    # time (or are about to). Sessions now last 5-30 minutes, so this needs to
+    # be seconds, not the 30s it was when a session lasted a day.
+    SESSION_SWEEP_INTERVAL_SECONDS: int = 5
     MATCH_COOLDOWN_DAYS: int = 21  # don't re-pair the same two strangers within this window
     MYSTERY_COOLDOWN_DAYS: int = 30  # don't re-serve the same mystery to a user within this window
 

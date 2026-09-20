@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Radar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { countryCodeToFlag } from "@/lib/utils";
+import { formatTimeLimit } from "@/lib/session-clock";
 import { CATEGORY_LABELS, type SessionDetail } from "@/types";
 
 type Stage = "connecting" | "connection_found" | "mystery_reveal" | "clue_reveal";
@@ -86,7 +87,9 @@ export function MysteryReveal({ session, onComplete }: { session: SessionDetail;
                   className={`h-2 w-2 rounded-full ${i <= session.mystery.difficulty ? "bg-signal-violet" : "bg-white/10"}`}
                 />
               ))}
-              <span className="ml-2 text-xs text-ink-faint">{DIFFICULTY_LABELS[session.mystery.difficulty]}</span>
+              <span className="ml-2 text-xs text-ink-faint">
+                {DIFFICULTY_LABELS[session.mystery.difficulty]} · {formatTimeLimit(session.mystery.time_limit_seconds)}
+              </span>
             </div>
             {session.mystery.flavor_text && (
               <p className="max-w-md text-ink-muted">{session.mystery.flavor_text}</p>
