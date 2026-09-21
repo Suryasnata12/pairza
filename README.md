@@ -23,8 +23,9 @@ a real matchmaking engine with an automated test suite, and a real Next.js front
 ## What's actually implemented
 
 **Backend (FastAPI + PostgreSQL + Redis) — fully functional:**
-- Email/password auth (Argon2id hashing, JWT access + refresh token rotation, httpOnly cookies). Google OAuth has a
-  complete, working implementation but needs your own Google OAuth credentials to activate (see below).
+- Email/password auth (Argon2id hashing, JWT access + refresh token rotation, httpOnly cookies). Google sign-in is
+  implemented on the API (`POST /api/auth/google`); the web app has no Google button yet, and it needs your own Google
+  OAuth credentials to activate (see below).
 - The matchmaking engine: Redis-locked pairing, permanent block exclusion, a time-based cooldown before the same two
   people can be re-paired, a time-based cooldown before the same person sees the same mystery again, and randomized
   clue-role assignment. **This is the part the product lives or dies on, and it has direct test coverage** proving
@@ -44,7 +45,7 @@ a real matchmaking engine with an automated test suite, and a real Next.js front
 - Admin: user suspend/ban, mystery CRUD + publish workflow, report review queue, category enable/disable, a
   real AI-backed mystery generation pipeline (see below), and an analytics endpoint (DAU/MAU/retention, matches
   and completions per user, average session length).
-- **71 automated test functions** written against a real Postgres + Redis instance (see `apps/api/tests/`)
+- **85 automated test functions** written against a real Postgres + Redis instance (see `apps/api/tests/`)
   covering every invariant above, not mocks. Run them with `pytest -v` from `apps/api`.
 
 **Frontend (Next.js 16 + React 19 + Tailwind v4) — fully functional:**
@@ -63,8 +64,9 @@ completely real, with the architecture built to extend cleanly:
 - **Mystery content**: 8 hand-authored mysteries across 5 of the 9 categories (the extensible schema already
   supports all 9 — adding a category is a one-line addition plus content, no code changes to matchmaking, sessions,
   or chat). `apps/api/scripts/seed.py` is where to add more.
-- **Google OAuth**: the verification logic, endpoint, and frontend integration point are complete and correct, but
-  untestable in this environment without real Google credentials (see `GOOGLE_CLIENT_ID` below).
+- **Google OAuth**: the API side (token verification, the endpoint, and the account-matching rules below) is
+  complete, but there is no Google button in the web app yet, and it's untestable in this environment without real
+  Google credentials (see `GOOGLE_CLIENT_ID` below).
 - **Admin analytics**: one real chart (completions by category) plus the core KPIs, rather than an exhaustive
   dashboard.
 - **Creator/UGC system**: intentionally not built — the spec itself flags this as post-MVP.
@@ -192,6 +194,25 @@ mocked. See `apps/api/tests/conftest.py` for how isolation between tests works.
 Without these set, `POST /api/auth/google` returns a clear "not configured" error rather than failing silently —
 email/password auth is completely unaffected either way.
 
+### How a Google sign-in is matched to an account
+
+Google's `email_verified` claim is required: a token whose email Google hasn't verified is refused
+(`401 google_email_unverified`). After that:
+
+| Situation | Result |
+| --- | --- |
+| The Google account is already linked to a Pairza account | Signs in. |
+| No Pairza account uses that email | Creates one (the client must send a `username` and `country_code`, else `401 google_needs_profile`). |
+| An account uses that email and is **verified**, with no Google link | Links to it. |
+| An account uses that email but is **unverified** (every password sign-up today) | **Refused**, `409 google_email_in_use`; nothing is changed and no session is issued. |
+| An account uses that email but is linked to a *different* Google account | Refused, `409 google_email_in_use`; never overwritten. |
+
+The refusal in the fourth row is deliberate. Password sign-up doesn't prove the person owns the email, so if
+Google matched by email alone, someone could register a victim's address with their own password and then hand the
+victim's later Google sign-in an account the attacker still controls (account pre-hijacking). Until email
+verification exists, a person who signed up with a password keeps using that password. Safe linking for them (a
+signed-in "connect Google" action, plus email verification so unverified accounts can be reclaimed) is future work.
+
 ## AI mystery generation
 
 Beyond the hand-authored seed mysteries, Pairza can generate new ones with a real AI pipeline: generation →
@@ -248,7 +269,7 @@ pairza/
 │   │   │   └── common/          # db, redis, security, shared deps
 │   │   ├── alembic/             # migrations
 │   │   ├── scripts/             # seed.py (demo data), generate_mysteries.py + validate_mystery.py (AI pipeline)
-│   │   └── tests/               # 71 test functions, real Postgres + Redis
+│   │   └── tests/               # 85 test functions, real Postgres + Redis
 │   └── web/                     # Next.js frontend
 │       ├── app/                 # routes (landing, auth, home, mystery, vault, profile, admin)
 │       ├── components/          # UI primitives + feature components

@@ -121,9 +121,92 @@ GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v3/certs"
 GOOGLE_ISSUER = {"accounts.google.com", "https://accounts.google.com"}
 
 
+def extract_google_identity(claims: dict) -> tuple[str, str]:
+    """
+    Returns (google_sub, email), but only for an identity Google itself vouches for.
+
+    An ID token's `email` is only proof of mailbox ownership when `email_verified`
+    is true. Everything downstream (creating an account and, above all, deciding
+    whether a Google login is the same person as an existing account) rests on
+    that, so a missing or unverified email is refused outright, never trusted.
+
+    Used by BOTH verify_google_id_token and resolve_google_user, so the rule
+    lives in one place and can't be bypassed by a future caller that hands
+    resolve_google_user claims of its own.
+    """
+    google_sub = claims.get("sub")
+    if not isinstance(google_sub, str) or not google_sub:
+        raise UnauthorizedError("We couldn't verify that Google sign-in.")
+
+    email = claims.get("email")
+    flag = claims.get("email_verified")
+    # Google sends a JSON boolean; tolerate the string "true" that some libraries/older tokens produce.
+    email_verified = flag is True or (isinstance(flag, str) and flag.strip().lower() == "true")
+    if not isinstance(email, str) or not email.strip() or not email_verified:
+        raise UnauthorizedError(
+            "Google hasn't verified the email on that account, so we can't sign you in with it.",
+            code="google_email_unverified",
+        )
+    return google_sub, email
+
+
+async def resolve_google_user(
+    db: AsyncSession, claims: dict, username: str | None, country_code: str | None
+) -> User:
+    """
+    Decides which Pairza account a verified Google identity signs in to.
+
+      1. Already linked (google_sub matches)  -> sign in.
+      2. No account with that email           -> create one (needs username + country).
+      3. An account with that email exists    -> link ONLY if it is verified and not linked
+         to some other Google identity. Otherwise refuse with 409 and change nothing.
+
+    Why (3) never links to an unverified account: password sign-up does not prove
+    the person owns the email. Anyone can register someone else's address with a
+    password of their own; if Google then "matched by email" they would hand the
+    real owner an account the attacker still holds the password and sessions for
+    (account pre-hijacking). Linking a Google identity to an existing account
+    needs proof of ownership of BOTH sides, and today only Google's side is proven.
+    """
+    google_sub, email = extract_google_identity(claims)
+
+    result = await db.execute(select(User).where(User.google_sub == google_sub))
+    user = result.scalar_one_or_none()
+    if user is not None:
+        return user
+
+    existing = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
+    if existing is not None:
+        if existing.google_sub is not None:
+            # Never silently re-point an account at a different Google identity.
+            raise ConflictError(
+                "That email is already connected to a different Google account.", code="google_email_in_use"
+            )
+        if not existing.is_verified:
+            raise ConflictError(
+                "An account with that email already exists. Sign in with your password instead.",
+                code="google_email_in_use",
+            )
+        existing.google_sub = google_sub
+        return existing
+
+    if not username or not country_code:
+        raise UnauthorizedError(
+            "First-time Google sign-in needs a username and country.", code="google_needs_profile"
+        )
+
+    user = User(email=email, google_sub=google_sub, is_verified=True)  # verified: email_verified enforced above
+    db.add(user)
+    await db.flush()
+    db.add(Profile(user_id=user.id, username=username, country_code=country_code.upper()))
+    db.add(UserPreferences(user_id=user.id))
+    return user
+
+
 async def verify_google_id_token(id_token: str) -> dict:
     """
-    Verifies a Google-issued ID token against Google's published JWKS.
+    Verifies a Google-issued ID token against Google's published JWKS, and that
+    it carries a verified email (see extract_google_identity).
 
     Requires GOOGLE_CLIENT_ID to be configured — without it we can't check
     the `aud` claim, so we refuse rather than silently skip a security
@@ -156,4 +239,5 @@ async def verify_google_id_token(id_token: str) -> dict:
     if claims.get("iss") not in GOOGLE_ISSUER:
         raise UnauthorizedError("We couldn't verify that Google sign-in.")
 
+    extract_google_identity(claims)  # refuses a missing / unverified email
     return claims

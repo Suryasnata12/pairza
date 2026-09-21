@@ -8,7 +8,7 @@ from app.common.database import get_db
 from app.common.deps import enforce_rate_limit, get_current_user
 from app.common.exceptions import UnauthorizedError
 from app.config.settings import get_settings
-from app.users.models import Profile, User, UserPreferences
+from app.users.models import Profile, User
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 settings = get_settings()
@@ -55,29 +55,8 @@ async def login(payload: LoginRequest, response: Response, request: Request, db:
 @router.post("/google", response_model=AuthUserResponse)
 async def google_auth(payload: GoogleAuthRequest, response: Response, db: AsyncSession = Depends(get_db)):
     claims = await service.verify_google_id_token(payload.id_token)
-    google_sub = claims["sub"]
-    email = claims.get("email")
-
-    result = await db.execute(select(User).where(User.google_sub == google_sub))
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        # First time we've seen this Google account — link by email if an
-        # account already exists, otherwise provision a new one.
-        existing = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
-        if existing:
-            existing.google_sub = google_sub
-            user = existing
-        else:
-            if not payload.username or not payload.country_code:
-                raise UnauthorizedError(
-                    "First-time Google sign-in needs a username and country.", code="google_needs_profile"
-                )
-            user = User(email=email, google_sub=google_sub, is_verified=True)
-            db.add(user)
-            await db.flush()
-            db.add(Profile(user_id=user.id, username=payload.username, country_code=payload.country_code.upper()))
-            db.add(UserPreferences(user_id=user.id))
+    # Sign in, create, or refuse (409) — see service.resolve_google_user for the account-linking policy.
+    user = await service.resolve_google_user(db, claims, payload.username, payload.country_code)
 
     access_token, refresh_token = await service.issue_token_pair(db, user)
     _set_auth_cookies(response, access_token, refresh_token)
