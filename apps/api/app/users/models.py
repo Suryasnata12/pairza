@@ -59,6 +59,12 @@ class Profile(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     categories_completed: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     average_solve_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # Computed skill level (1-5), used ONLY to pick difficulty for this player's next encounter
+    # (mysteries/progression.py). NOT the same thing as UserPreferences.puzzle_experience_level,
+    # which is a one-time self-reported label and never updated by gameplay. Never demoted in v1 —
+    # see progression.rank_after_solve. Never shown to the player as a "rank."
+    difficulty_rank: Mapped[int] = mapped_column(Integer, default=1)
+
     user: Mapped["User"] = relationship(back_populates="profile")
 
     @property

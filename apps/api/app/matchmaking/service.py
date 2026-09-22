@@ -24,6 +24,7 @@ from app.config.settings import get_settings
 from app.matchmaking.models import Match, MatchHistory
 from app.moderation.models import Block
 from app.mysteries.difficulty import session_end_time
+from app.mysteries.progression import DEFAULT_DIFFICULTY_RANK
 from app.mysteries.service import pick_random_mystery_for_pair, recent_mystery_ids_for_user
 from app.sessions.models import MysterySession
 from app.users.models import Profile, User
@@ -76,6 +77,15 @@ async def _recently_matched(db: AsyncSession, user_a: uuid.UUID, user_b: uuid.UU
         )
     )
     return result.scalars().first() is not None
+
+
+async def _difficulty_rank(db: AsyncSession, user_id: uuid.UUID) -> int:
+    """The computed skill level pick_random_mystery_for_pair uses to pick this player's
+    encounter difficulty (mysteries/progression.py). Defaults to a new player's rank if,
+    for any reason, the profile row can't be found — selection must never crash matchmaking."""
+    result = await db.execute(select(Profile.difficulty_rank).where(Profile.user_id == user_id))
+    rank = result.scalar_one_or_none()
+    return rank if rank is not None else DEFAULT_DIFFICULTY_RANK
 
 
 async def _is_eligible_candidate(db: AsyncSession, candidate_id: uuid.UUID) -> bool:
@@ -136,7 +146,13 @@ async def join_matchmaking(db: AsyncSession, redis: Redis, user: User) -> dict:
         cooldown_cutoff = utcnow() - timedelta(days=settings.MYSTERY_COOLDOWN_DAYS)
         recent_a = await recent_mystery_ids_for_user(db, user.id, cooldown_cutoff)
         recent_b = await recent_mystery_ids_for_user(db, partner_id, cooldown_cutoff)
-        mystery = await pick_random_mystery_for_pair(db, user.id, partner_id, recent_a | recent_b)
+        # Adaptive difficulty (approved rule): the pair's base difficulty is the LOWER of the
+        # two players' ranks, with an occasional surprise pushing it higher — see
+        # mysteries/progression.py. Whoever ends up "player_a" vs "player_b" below carries no
+        # difficulty meaning; only the pair of ranks matters, order-independent.
+        rank_a = await _difficulty_rank(db, user.id)
+        rank_b = await _difficulty_rank(db, partner_id)
+        mystery = await pick_random_mystery_for_pair(db, user.id, partner_id, recent_a | recent_b, rank_a, rank_b)
 
         if mystery is None:
             # No eligible mystery for this pair right now (e.g. a very

@@ -45,7 +45,7 @@ a real matchmaking engine with an automated test suite, and a real Next.js front
 - Admin: user suspend/ban, mystery CRUD + publish workflow, report review queue, category enable/disable, a
   real AI-backed mystery generation pipeline (see below), and an analytics endpoint (DAU/MAU/retention, matches
   and completions per user, average session length).
-- **85 automated test functions** written against a real Postgres + Redis instance (see `apps/api/tests/`)
+- **112 automated test functions** written against a real Postgres + Redis instance (see `apps/api/tests/`)
   covering every invariant above, not mocks. Run them with `pytest -v` from `apps/api`.
 
 **Frontend (Next.js 16 + React 19 + Tailwind v4) — fully functional:**
@@ -63,7 +63,7 @@ completely real, with the architecture built to extend cleanly:
 
 - **Mystery content**: 8 hand-authored mysteries across 5 of the 9 categories (the extensible schema already
   supports all 9 — adding a category is a one-line addition plus content, no code changes to matchmaking, sessions,
-  or chat). `apps/api/scripts/seed.py` is where to add more.
+  or chat). `apps/api/scripts/seed_system.py` is where to add more (see Production data below).
 - **Google OAuth**: the API side (token verification, the endpoint, and the account-matching rules below) is
   complete, but there is no Google button in the web app yet, and it's untestable in this environment without real
   Google credentials (see `GOOGLE_CLIENT_ID` below).
@@ -133,6 +133,50 @@ Sound is handled by one reusable audio manager in `apps/web/lib/audio/`; nothing
   click/tap/keypress when it has to. Ogg Vorbis isn't decodable everywhere (notably older Safari); `sources` in
   `sounds.ts` takes a fallback format (`.m4a` / `.mp3`) when one is needed.
 
+## Production data
+
+Pairza's data falls into three kinds, deliberately kept in three separate scripts so a production
+deployment can never accidentally run something meant for a laptop:
+
+- **`python -m scripts.seed_system`** — the only script safe to run against a real production
+  database. Creates badge definitions, the mystery category config, and the initial hand-authored
+  mystery library — nothing else. No users, no matches, no sessions, no fake activity, ever.
+  Idempotent (safe to run on every deploy).
+- **`python -m scripts.seed_demo`** — DEVELOPMENT / DEMO ONLY. Builds the full fake environment
+  (a demo account, ~24 fake users, weeks of fabricated matches/sessions/history) so there's
+  something to click through and something for the admin analytics dashboard to chart. It refuses
+  to run unless `ENVIRONMENT=development`, specifically so it can't be fired at a real deployment
+  by mistake.
+- **`python -m scripts.create_admin`** — the real way to get an admin account into production:
+  `ADMIN_EMAIL=you@yourcompany.com ADMIN_PASSWORD='...' python -m scripts.create_admin`. There is
+  no default for either variable, and the password is never logged or printed. Safe to re-run —
+  an existing account is promoted in place rather than duplicated.
+
+Everything else — real users, profiles, matches, sessions, XP, badges, and history — is created
+entirely by the application itself as people actually play (register → `auth/service.py`,
+matchmaking → `matchmaking/service.py`, solving → `rewards/service.py`). No seed script creates
+any of it, in production or otherwise; `scripts/seed.py` still exists only as a deprecated
+`python -m scripts.seed` shim pointing at `seed_demo` for anyone with the old command memorized.
+
+### Adaptive difficulty
+
+Players are never shown a mystery list or a difficulty picker (mysteries stay a secret encounter,
+by design — see `matchmaking/service.py`'s `join_matchmaking`). Instead, each `Profile` carries a
+computed `difficulty_rank` (1-5, starts at 1) that the matchmaking engine uses, invisibly, to pick
+the pair's mystery:
+
+- **Base difficulty = the lower of the two players' ranks** (`mysteries/progression.py`) — the
+  ceiling is set by whoever is less experienced, since one player's clue is useless without the
+  other's.
+- **Surprise**: a small, tunable chance pushes the target 1-3 levels above that base as an
+  occasional "skill test" — see `SURPRISE_RULES` in that file to adjust the odds.
+- **No demotion (v1)**: solving a mystery at or above your rank moves it up by exactly one level;
+  failing — surprise or not — never lowers it. Every outcome is still recorded (`UserMysteryHistory`)
+  for future balancing, it just never costs rank today.
+
+`difficulty_rank` is separate from `UserPreferences.puzzle_experience_level`, which stays a
+one-time, self-reported label shown back to the player and never touched by gameplay.
+
 ## Quick start (Docker — recommended)
 
 Requires Docker and Docker Compose.
@@ -142,10 +186,11 @@ cp .env.example .env          # defaults work fine for local dev
 docker compose up --build
 ```
 
-Then, once it's up, seed the database (safe to re-run — it skips anything that already exists):
+Then, once it's up, seed the database for local development (safe to re-run — see Production data
+below for what this actually does and why it's split into two scripts):
 
 ```bash
-docker compose exec api python -m scripts.seed
+docker compose exec api python -m scripts.seed_demo
 ```
 
 - Frontend: http://localhost:3000
@@ -163,7 +208,7 @@ pip install -r requirements.txt
 cp .env.example .env   # edit DATABASE_URL/REDIS_URL if yours differ
 createdb pairza
 alembic upgrade head
-python -m scripts.seed
+python -m scripts.seed_demo
 uvicorn app.main:app --reload
 
 # Frontend (separate terminal)
@@ -269,7 +314,7 @@ pairza/
 │   │   │   └── common/          # db, redis, security, shared deps
 │   │   ├── alembic/             # migrations
 │   │   ├── scripts/             # seed.py (demo data), generate_mysteries.py + validate_mystery.py (AI pipeline)
-│   │   └── tests/               # 85 test functions, real Postgres + Redis
+│   │   └── tests/               # 112 test functions, real Postgres + Redis
 │   └── web/                     # Next.js frontend
 │       ├── app/                 # routes (landing, auth, home, mystery, vault, profile, admin)
 │       ├── components/          # UI primitives + feature components

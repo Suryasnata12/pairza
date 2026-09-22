@@ -62,10 +62,12 @@ class Settings(BaseSettings):
     # --- Frontend URLs (for links in emails etc.) ---
     FRONTEND_URL: str = "http://localhost:3000"
 
-    # --- Seed data credentials (scripts/seed.py only — never used at runtime) ---
-    # Defaults match what the README documents for local/demo use. Override
-    # these via .env for any deployment where scripts/seed.py might run
-    # somewhere less trusted than a laptop.
+    # --- Demo data credentials (scripts/seed_demo.py ONLY — never used at runtime, and
+    # seed_demo.py itself refuses to run unless ENVIRONMENT=development) ---
+    # These are intentionally predictable: they only ever populate a disposable local/demo
+    # database. A REAL production admin account is never created from these defaults — see
+    # scripts/create_admin.py, which reads ADMIN_EMAIL / ADMIN_PASSWORD from the environment
+    # with no default at all.
     DEMO_USER_EMAIL: str = "demo@pairza.app"
     DEMO_USER_PASSWORD: str = "PairzaDemo123!"
     ADMIN_USER_EMAIL: str = "admin@pairza.app"

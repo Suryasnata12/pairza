@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.mixins import utcnow
 from app.mysteries.models import Mystery
+from app.mysteries.progression import rank_after_solve
 from app.rewards.models import Badge, Reward, UserBadge
 from app.sessions.models import Memory, MysterySession, UserMysteryHistory
 from app.users.models import Profile
@@ -118,6 +119,10 @@ async def process_solve(db: AsyncSession, session: MysterySession, mystery: Myst
         profile.xp += xp_gain
         profile.mystery_count += 1
         profile.solved_count += 1
+        # Adaptive difficulty (approved rule): success can raise rank, by exactly one level at a
+        # time; failure NEVER lowers it (process_non_solve above never touches difficulty_rank at
+        # all — that's what "no demotion in v1" means in code). See mysteries/progression.py.
+        profile.difficulty_rank = rank_after_solve(profile.difficulty_rank, mystery.difficulty)
 
         prior_total = (profile.average_solve_seconds or 0) * (profile.solved_count - 1)
         profile.average_solve_seconds = (prior_total + solve_seconds) / profile.solved_count
