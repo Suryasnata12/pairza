@@ -200,6 +200,155 @@ async def seed_mysteries(db) -> None:
             "clue_b": "Witness B is certain about the object: it was definitely a car, though they never saw the color.",
         }],
     )
+
+    # --- Difficulty 5: three-stage Morse investigations ---
+    # Every Morse string below was checked letter-by-letter against standard International Morse
+    # Code before being added. One correction from the source design: a couple of source final
+    # stages handed one player the ENTIRE decoded phrase while the other got an unrelated or
+    # near-useless detail, which would let that player solve alone — against Pairza's own
+    # "neither player solves a phase alone" rule. Those two stages (The Hidden Door, The Key Is
+    # Underneath) have their final Morse phrase split across clue_a/clue_b here, the same way
+    # every other stage already splits information. Nothing else was changed.
+    await _add_mystery(
+        db, "The Hidden Door", "cipher", 5,
+        "A message arrives in two pieces. Somewhere in this room is a door that isn't a door.",
+        "Not every door looks like a door.",
+        ["don't trust the mirror", "dont trust the mirror"],
+        [
+            {
+                "number": 1, "is_final": False,
+                "context": "A message arrives in Morse, split between the two of you.",
+                "clue_a": "Your fragment: .... .. -.. -.. . -.",
+                "clue_b": "Your fragment: -.. --- --- .-.",
+                "checkpoint_answers": ["hidden door"],
+            },
+            {
+                "number": 2, "is_final": False,
+                "context": "Something in this room is not what it seems.",
+                "clue_a": "You see a painting, a mirror, a bookshelf, and a statue. The painting hangs normally, and the mirror has no unusual markings.",
+                "clue_b": "The bookshelf has a thin dark line running around its outer frame, and there's a small gap between it and the wall.",
+                "checkpoint_answers": ["bookshelf"],
+            },
+            {
+                "number": 3, "is_final": True,
+                "context": "Behind the bookshelf is one last message, in two halves again.",
+                "clue_a": "Your half: -.. --- -. .----. - / - .-. ..- ... -",
+                "clue_b": "Your half: - .... . / -- .. .-. .-. --- .-.",
+            },
+        ],
+    )
+    await _add_mystery(
+        db, "Follow the Shadow", "cipher", 5,
+        "A shadow falls where it shouldn't. Something is waiting at the end of it.",
+        "Shadows don't lie about where they point.",
+        ["hidden compartment"],
+        [
+            {
+                "number": 1, "is_final": False,
+                "context": "A message arrives in Morse, split between the two of you.",
+                "clue_a": "Your fragment: ..-. --- .-.. .-.. --- .--",
+                "clue_b": "Your fragment: - .... . / ... .... .- -.. --- .--",
+                "checkpoint_answers": ["follow the shadow"],
+            },
+            {
+                "number": 2, "is_final": False,
+                "context": "A statue stands beneath a single light, its shadow stretching across the floor toward a wall.",
+                "clue_a": "The wall ahead has three symbols on it: a diamond, a circle, and a triangle.",
+                "clue_b": "The statue's shadow ends directly beneath one of the three symbols on the wall: the diamond.",
+                "checkpoint_answers": ["diamond"],
+            },
+            {
+                "number": 3, "is_final": True,
+                "context": "Behind the diamond, a coded message reads NOT THE DOOR — a decoy. Something else here is real.",
+                "clue_a": "The diamond symbol also appears on one floor tile.",
+                "clue_b": "That marked floor tile sounds hollow when tapped.",
+            },
+        ],
+    )
+    await _add_mystery(
+        db, "Someone Is Watching", "cipher", 5,
+        "A camera with its light off. A reflection that doesn't belong. You are not alone here.",
+        "Not every reflection shows what's really there.",
+        ["you are not alone"],
+        [
+            {
+                "number": 1, "is_final": False,
+                "context": "A message arrives in Morse, in three pieces — the middle one is yours to hold apart from the rest.",
+                "clue_a": "Your two fragments, in order (first, then third): ... --- -- . --- -. .  and  .-- .- - -.-. .... .. -. --.",
+                "clue_b": "Your fragment (it goes in the middle): .. ...",
+                "checkpoint_answers": ["someone is watching"],
+            },
+            {
+                "number": 2, "is_final": False,
+                "context": "A security camera is mounted in the corner of the room. Its indicator light is off.",
+                "clue_a": "The camera's indicator light is off — it shouldn't be recording anything.",
+                "clue_b": "The camera lens reflects something anyway: what looks like the silhouette of a person.",
+                "checkpoint_answers": ["reflection"],
+            },
+            {
+                "number": 3, "is_final": True,
+                "context": "Look at what the reflection is actually showing.",
+                "clue_a": "The reflection doesn't match the room directly in front of the camera.",
+                "clue_b": "What the reflection actually shows is a mirror — one that's behind both of you.",
+            },
+        ],
+    )
+    await _add_mystery(
+        db, "The Key Is Underneath", "cipher", 5,
+        "A key is hidden somewhere close. The truth is, quite literally, underneath.",
+        "The first piece of something larger is waiting to be found.",
+        ["the first piece", "first piece"],
+        [
+            {
+                "number": 1, "is_final": False,
+                "context": "A message arrives in Morse, split between the two of you.",
+                "clue_a": "Your fragment: - .... . / -.- . -.--",
+                "clue_b": "Your fragment: .. ... / ..- -. -.. . .-. -. . .- - ....",
+                "checkpoint_answers": ["the key is underneath"],
+            },
+            {
+                "number": 2, "is_final": False,
+                "context": "The room holds a desk, a chair, a lamp, and a locked box.",
+                "clue_a": "Nothing is visible on top of the desk.",
+                "clue_b": "There's writing underneath the desk that reads NOT HERE. The chair sits directly underneath the desk.",
+                "checkpoint_answers": ["key", "the key"],
+            },
+            {
+                "number": 3, "is_final": True,
+                "context": "The key opens the locked box. Inside is one last message, in two halves.",
+                "clue_a": "Your half: -.-- --- ..- / ..-. --- ..- -. -..",
+                "clue_b": "Your half: - .... . / ..-. .. .-. ... - / .--. .. . -.-. .",
+            },
+        ],
+    )
+    await _add_mystery(
+        db, "Don't Look Back", "cipher", 5,
+        "A hallway. A mirror at the end of it. Something in the reflection that shouldn't be there.",
+        "Not everything the mirror shows exists in the room behind you.",
+        ["exit"],
+        [
+            {
+                "number": 1, "is_final": False,
+                "context": "A message arrives in Morse, split between the two of you.",
+                "clue_a": "Your fragment: -.. --- -. .----. -",
+                "clue_b": "Your fragment: .-.. --- --- -.- / -... .- -.-. -.-",
+                "checkpoint_answers": ["don't look back", "dont look back"],
+            },
+            {
+                "number": 2, "is_final": False,
+                "context": "You're standing in a long hallway. At the end of it is a large mirror.",
+                "clue_a": "Looking directly at the hallway, nothing about it seems unusual.",
+                "clue_b": "Looking in the mirror instead, you can see a triangle symbol that doesn't exist anywhere in the hallway itself.",
+                "checkpoint_answers": ["triangle mark", "triangle"],
+            },
+            {
+                "number": 3, "is_final": True,
+                "context": "Under a loose floor tile is a small piece of paper, marked in Morse: . -..- .. -",
+                "clue_a": "The triangular mark on the floor points toward one loose tile.",
+                "clue_b": "Under that tile is a small piece of paper.",
+            },
+        ],
+    )
     await db.commit()
 
 
