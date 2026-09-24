@@ -107,6 +107,23 @@ class RefreshToken(Base, UUIDPrimaryKeyMixin):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class PasswordResetToken(Base, UUIDPrimaryKeyMixin):
+    """Stores only a SHA-256 hash of the raw token — same principle as RefreshToken.token_jti:
+    a database leak alone can never be used to reset anyone's password. `used_at` makes a token
+    single-use; requesting a new reset invalidates any earlier unused one for that user (see
+    auth/service.py's request_password_reset)."""
+
+    __tablename__ = "password_reset_tokens"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class UserDailyActivity(Base, UUIDPrimaryKeyMixin):
     """
     One row per user per calendar day they were seen using the app — the

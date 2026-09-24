@@ -1,11 +1,14 @@
+import hashlib
+import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.schemas import RegisterRequest
+from app.common.email import send_email
 from app.common.exceptions import ConflictError, UnauthorizedError, ValidationFailedError
 from app.common.mixins import utcnow
 from app.common.security import (
@@ -15,7 +18,7 @@ from app.common.security import (
     verify_password,
 )
 from app.config.settings import get_settings
-from app.users.models import Profile, RefreshToken, User, UserPreferences
+from app.users.models import PasswordResetToken, Profile, RefreshToken, User, UserPreferences
 
 settings = get_settings()
 
@@ -241,3 +244,110 @@ async def verify_google_id_token(id_token: str) -> dict:
 
     extract_google_identity(claims)  # refuses a missing / unverified email
     return claims
+
+
+# --- Forgot password / forgot username -----------------------------------------------------
+#
+# Pairza logs in by EMAIL, not username (see LoginRequest), so "forgot ID" here means
+# "I remember my username but not which email I used" — request_username_reminder is that
+# path. Both this and request_password_reset share the same shape on purpose: they ALWAYS
+# return successfully to the caller regardless of whether the email/username exists, and the
+# router returns one identical, generic message either way (see auth/router.py). Only
+# reset_password itself, given a token the caller must already possess from their inbox,
+# distinguishes valid from invalid — knowing a random secret is not an enumeration risk the
+# way knowing an email or username is.
+
+_RESET_TOKEN_BYTES = 32  # secrets.token_urlsafe(32) -> a 43-character, ~256-bit token
+
+
+def _hash_reset_token(raw_token: str) -> str:
+    """SHA-256 of the raw token — see PasswordResetToken's docstring for why only the hash is stored."""
+    return hashlib.sha256(raw_token.encode()).hexdigest()
+
+
+async def request_password_reset(db: AsyncSession, email: str) -> None:
+    result = await db.execute(select(User).where(func.lower(User.email) == email.strip().lower()))
+    user = result.scalar_one_or_none()
+
+    # Silently do nothing for: no such account, a Google-only account (nothing to reset — see
+    # User.hashed_password), or an inactive/banned one. The caller sees the same generic
+    # response as a successful send either way.
+    if user is None or user.hashed_password is None or not user.is_active or user.is_banned:
+        return
+
+    # Invalidate any earlier unused token for this user first, so only the newest link ever works.
+    await db.execute(
+        update(PasswordResetToken)
+        .where(PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None))
+        .values(used_at=utcnow())
+    )
+
+    raw_token = secrets.token_urlsafe(_RESET_TOKEN_BYTES)
+    db.add(PasswordResetToken(
+        user_id=user.id,
+        token_hash=_hash_reset_token(raw_token),
+        expires_at=utcnow() + timedelta(minutes=settings.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES),
+        created_at=utcnow(),
+    ))
+    await db.commit()
+
+    reset_link = f"{settings.FRONTEND_URL}/reset-password?token={raw_token}"
+    send_email(
+        user.email,
+        "Reset your Pairza password",
+        "Someone requested a password reset for this Pairza account.\n\n"
+        f"Reset your password: {reset_link}\n\n"
+        f"This link expires in {settings.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES} minutes and can only be used once.\n\n"
+        "If you didn't request this, you can safely ignore this email — your password hasn't been changed.",
+    )
+
+
+async def reset_password(db: AsyncSession, raw_token: str, new_password: str) -> None:
+    token_hash = _hash_reset_token(raw_token)
+    result = await db.execute(select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash))
+    reset_token = result.scalar_one_or_none()
+
+    now = utcnow()
+    if (
+        reset_token is None
+        or reset_token.used_at is not None
+        or reset_token.expires_at.replace(tzinfo=timezone.utc) < now
+    ):
+        raise UnauthorizedError(
+            "This reset link is invalid or has expired. Please request a new one.", code="invalid_reset_token"
+        )
+
+    user_result = await db.execute(select(User).where(User.id == reset_token.user_id))
+    user = user_result.scalar_one_or_none()
+    if user is None or not user.is_active or user.is_banned:
+        raise UnauthorizedError("This account is no longer active.", code="invalid_reset_token")
+
+    reset_token.used_at = now  # single-use, even on a correct token
+    user.hashed_password = hash_password(new_password)
+
+    # A password reset must end every existing session on this account — the whole point of
+    # resetting is that someone other than the account owner may currently have access.
+    await db.execute(
+        update(RefreshToken).where(RefreshToken.user_id == user.id, RefreshToken.revoked.is_(False)).values(revoked=True)
+    )
+    await db.commit()
+
+
+async def request_username_reminder(db: AsyncSession, username: str) -> None:
+    result = await db.execute(
+        select(User)
+        .join(Profile, Profile.user_id == User.id)
+        .where(func.lower(Profile.username) == username.strip().lower())
+    )
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_active or user.is_banned:
+        return
+
+    send_email(
+        user.email,
+        "Your Pairza account email",
+        f'Someone asked for a reminder of which email is linked to the Pairza username "{username}".\n\n'
+        f"This address — {user.email} — is the one to sign in with.\n\n"
+        "If you didn't request this, you can safely ignore this email.",
+    )
+

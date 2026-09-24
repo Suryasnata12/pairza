@@ -59,6 +59,17 @@ class Settings(BaseSettings):
     RATE_LIMIT_MESSAGES_PER_MINUTE: int = 60
     RATE_LIMIT_AUTH_ATTEMPTS_PER_MINUTE: int = 10
 
+    # --- Outbound email (app/common/email.py) — password reset / account recovery only ---
+    # SMTP_HOST empty (the default) means "log the email instead of sending it": local dev and
+    # this project's sandboxed build both work with zero setup. Set these for real delivery.
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "noreply@pairza.app"
+    SMTP_USE_TLS: bool = True
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
+
     # --- Frontend URLs (for links in emails etc.) ---
     FRONTEND_URL: str = "http://localhost:3000"
 

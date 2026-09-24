@@ -3,7 +3,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service
-from app.auth.schemas import AuthUserResponse, GoogleAuthRequest, LoginRequest, RegisterRequest
+from app.auth.schemas import (
+    AuthUserResponse,
+    ForgotPasswordRequest,
+    ForgotUsernameRequest,
+    GoogleAuthRequest,
+    LoginRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+)
 from app.common.database import get_db
 from app.common.deps import enforce_rate_limit, get_current_user
 from app.common.exceptions import UnauthorizedError
@@ -64,6 +72,36 @@ async def google_auth(payload: GoogleAuthRequest, response: Response, db: AsyncS
     profile_result = await db.execute(select(Profile).where(Profile.user_id == user.id))
     profile = profile_result.scalar_one()
     return AuthUserResponse(id=user.id, email=user.email, username=profile.username, is_verified=user.is_verified, is_admin=user.is_admin)
+
+
+@router.post("/forgot-password", status_code=202)
+async def forgot_password(payload: ForgotPasswordRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Always returns the same generic message whether or not the email is registered — see
+    service.request_password_reset's docstring for why that's deliberate, not an oversight.
+    """
+    await enforce_rate_limit("auth_forgot_password", request.client.host, settings.RATE_LIMIT_AUTH_ATTEMPTS_PER_MINUTE)
+    await service.request_password_reset(db, payload.email)
+    return {"message": "If that email is registered, we've sent password reset instructions."}
+
+
+@router.post("/reset-password")
+async def reset_password(payload: ResetPasswordRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    """Unlike forgot-password, this DOES distinguish a valid token from an invalid/expired one —
+    see service.reset_password's docstring for why that's not an enumeration risk here."""
+    await enforce_rate_limit("auth_reset_password", request.client.host, settings.RATE_LIMIT_AUTH_ATTEMPTS_PER_MINUTE)
+    await service.reset_password(db, payload.token, payload.new_password)
+    return {"message": "Your password has been reset. Please sign in with your new password."}
+
+
+@router.post("/forgot-username", status_code=202)
+async def forgot_username(payload: ForgotUsernameRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    """Same non-enumerating shape as /forgot-password. Pairza logs in by email, not username
+    (see LoginRequest), so this is the recovery path for 'I remember my username, not my
+    email' — the reminder is emailed to the account on file, never returned in the response."""
+    await enforce_rate_limit("auth_forgot_username", request.client.host, settings.RATE_LIMIT_AUTH_ATTEMPTS_PER_MINUTE)
+    await service.request_username_reminder(db, payload.username)
+    return {"message": "If that username exists, we've emailed the account's registered address."}
 
 
 @router.post("/refresh")

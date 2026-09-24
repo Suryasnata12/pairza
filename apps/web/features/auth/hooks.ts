@@ -37,3 +37,22 @@ export function useLogout() {
     onSuccess: () => setMe(null),
   });
 }
+
+export function useForgotPassword() {
+  return useMutation({
+    mutationFn: (email: string) => api.post<{ message: string }>("/auth/forgot-password", { email }),
+  });
+}
+
+export function useResetPassword() {
+  return useMutation({
+    mutationFn: (input: { token: string; new_password: string }) =>
+      api.post<{ message: string }>("/auth/reset-password", input),
+  });
+}
+
+export function useForgotUsername() {
+  return useMutation({
+    mutationFn: (username: string) => api.post<{ message: string }>("/auth/forgot-username", { username }),
+  });
+}

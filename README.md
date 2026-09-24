@@ -45,7 +45,7 @@ a real matchmaking engine with an automated test suite, and a real Next.js front
 - Admin: user suspend/ban, mystery CRUD + publish workflow, report review queue, category enable/disable, a
   real AI-backed mystery generation pipeline (see below), and an analytics endpoint (DAU/MAU/retention, matches
   and completions per user, average session length).
-- **112 automated test functions** written against a real Postgres + Redis instance (see `apps/api/tests/`)
+- **123 automated test functions** written against a real Postgres + Redis instance (see `apps/api/tests/`)
   covering every invariant above, not mocks. Run them with `pytest -v` from `apps/api`.
 
 **Frontend (Next.js 16 + React 19 + Tailwind v4) — fully functional:**
@@ -88,6 +88,38 @@ completely real, with the architecture built to extend cleanly:
   extending either doesn't require touching matchmaking, sessions, or the validation pipeline's structure.
 
 None of this is hidden inside the code — search for scope-decision comments if you want the reasoning inline.
+
+## Account recovery
+
+Pairza logs in by **email**, not username (`LoginRequest` takes `email` + `password`), so
+"forgot ID" here means *"I remember my username, not which email I used"* — a separate recovery
+path from a forgotten password:
+
+- **`POST /api/auth/forgot-password`** — given an email, sends a reset link if an account with a
+  password exists for it. Always returns the same generic message either way, so the endpoint
+  can't be used to check which emails are registered. Google-only accounts (no password) are
+  silently skipped — there's nothing to reset.
+- **`POST /api/auth/reset-password`** — given the token from that link plus a new password.
+  Unlike forgot-password, this DOES distinguish a valid token from an invalid/expired/already-used
+  one (`invalid_reset_token`) — the token is a secret the caller already holds from their inbox,
+  not something guessable, so this isn't an enumeration risk. Resetting a password revokes every
+  refresh token on the account, ending all existing sessions.
+- **`POST /api/auth/forgot-username`** — given a username, emails a reminder of the account's
+  registered email to that same address. Same non-enumerating shape as forgot-password.
+
+Tokens are single-use, expire after `PASSWORD_RESET_TOKEN_EXPIRE_MINUTES` (default 30), and only
+a SHA-256 hash of each one is stored (`password_reset_tokens`) — the same principle as
+`refresh_tokens` storing only a hash of its jti. All three endpoints share the existing
+`RATE_LIMIT_AUTH_ATTEMPTS_PER_MINUTE` limiter.
+
+**Email delivery** (`app/common/email.py`) is stdlib-only (`smtplib`) — no new dependency. With
+no `SMTP_HOST` set (the default), it logs the email instead of sending it, so local development
+needs no real mail credentials; set `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD`
+/ `SMTP_FROM_EMAIL` for real delivery. The reset link is built from the existing `FRONTEND_URL`
+setting.
+
+Frontend pages: `/forgot-password`, `/reset-password` (reads `?token=` from the emailed link),
+and `/forgot-username`, linked from the login page.
 
 ## Difficulty & time limits
 
@@ -314,7 +346,7 @@ pairza/
 │   │   │   └── common/          # db, redis, security, shared deps
 │   │   ├── alembic/             # migrations
 │   │   ├── scripts/             # seed.py (demo data), generate_mysteries.py + validate_mystery.py (AI pipeline)
-│   │   └── tests/               # 112 test functions, real Postgres + Redis
+│   │   └── tests/               # 123 test functions, real Postgres + Redis
 │   └── web/                     # Next.js frontend
 │       ├── app/                 # routes (landing, auth, home, mystery, vault, profile, admin)
 │       ├── components/          # UI primitives + feature components

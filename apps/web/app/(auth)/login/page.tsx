@@ -50,6 +50,14 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
+          <div className="flex justify-between text-sm">
+            <Link href="/forgot-password" className="text-ink-muted hover:underline">
+              Forgot password?
+            </Link>
+            <Link href="/forgot-username" className="text-ink-muted hover:underline">
+              Forgot your email?
+            </Link>
+          </div>
           {error && <p className="text-sm text-urgent-coral">{error}</p>}
           <Button type="submit" className="mt-2 w-full" disabled={login.isPending}>
             {login.isPending ? "Signing in…" : "Sign in"}
