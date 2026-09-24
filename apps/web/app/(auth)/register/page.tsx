@@ -9,14 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useRegister } from "@/features/auth/hooks";
 import { ApiError } from "@/lib/api-client";
-
-const COUNTRIES = [
-  ["US", "United States"], ["GB", "United Kingdom"], ["CA", "Canada"], ["AU", "Australia"],
-  ["DE", "Germany"], ["FR", "France"], ["JP", "Japan"], ["KR", "South Korea"], ["BR", "Brazil"],
-  ["IN", "India"], ["MX", "Mexico"], ["IT", "Italy"], ["ES", "Spain"], ["NL", "Netherlands"],
-  ["SE", "Sweden"], ["PL", "Poland"], ["ZA", "South Africa"], ["NG", "Nigeria"], ["SG", "Singapore"],
-  ["IE", "Ireland"], ["NZ", "New Zealand"],
-];
+import { COUNTRIES } from "@/lib/countries";
 
 export default function RegisterPage() {
   const router = useRouter();
