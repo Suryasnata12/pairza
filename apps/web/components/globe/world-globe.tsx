@@ -4,6 +4,8 @@ import { useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Line } from "@react-three/drei";
 import * as THREE from "three";
+import { GlobeErrorBoundary } from "@/components/globe/globe-error-boundary";
+import { useWebGLSupported } from "@/lib/use-webgl-supported";
 
 const RADIUS = 1.8;
 
@@ -71,13 +73,48 @@ function GlobeMesh() {
   );
 }
 
+/**
+ * Purely decorative CSS placeholder — same footprint as the real globe, no WebGL involved at
+ * all. Shown instead of <Canvas> whenever WebGL isn't usable (see useWebGLSupported) or the real
+ * globe throws while rendering (see GlobeErrorBoundary): a background animation must never be
+ * the reason the landing page fails to load.
+ */
+function StaticGlobeFallback() {
+  return (
+    <div className="flex h-full w-full items-center justify-center">
+      <div
+        className="h-[70%] w-[70%] max-w-[280px] rounded-full opacity-60"
+        style={{
+          background: "radial-gradient(circle at 35% 30%, #1c2030, #06070b 70%)",
+          boxShadow: "inset 0 0 40px rgba(69,232,200,0.15), 0 0 60px rgba(155,123,255,0.1)",
+        }}
+      />
+    </div>
+  );
+}
+
 export function WorldGlobe({ className }: { className?: string }) {
+  const webglSupported = useWebGLSupported();
+
+  // Still checking (first client render, matching the server render) or genuinely unsupported:
+  // never mount <Canvas> — it's the WebGL context creation itself that previously risked
+  // crashing the tab, so the fix is to not attempt it, not to catch the crash after the fact.
+  if (webglSupported !== true) {
+    return (
+      <div className={className} aria-hidden="true">
+        <StaticGlobeFallback />
+      </div>
+    );
+  }
+
   return (
     <div className={className} aria-hidden="true">
-      <Canvas camera={{ position: [0, 0, 5], fov: 40 }} dpr={[1, 1.5]}>
-        <ambientLight intensity={1} />
-        <GlobeMesh />
-      </Canvas>
+      <GlobeErrorBoundary fallback={<StaticGlobeFallback />}>
+        <Canvas camera={{ position: [0, 0, 5], fov: 40 }} dpr={[1, 1.5]}>
+          <ambientLight intensity={1} />
+          <GlobeMesh />
+        </Canvas>
+      </GlobeErrorBoundary>
     </div>
   );
 }
