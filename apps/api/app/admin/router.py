@@ -8,6 +8,7 @@ from app.admin.schemas import (
     ActiveSessionOut,
     AdminUserOut,
     AnalyticsOut,
+    CountryCountOut,
     CategoryConfigOut,
     CategoryPoolCountsOut,
     GenerateMysteriesRequest,
@@ -26,12 +27,20 @@ from app.users.models import User
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
+@router.get("/users/countries", response_model=list[CountryCountOut])
+async def list_user_countries(admin: User = Depends(get_current_admin), db: AsyncSession = Depends(get_db)):
+    """Every country with at least one user, most users first — this is what fills in the
+    country filter's dropdown AND shows the count next to each one in the same request."""
+    counts = await service.get_user_counts_by_country(db)
+    return [CountryCountOut(**c) for c in counts]
+
+
 @router.get("/users", response_model=list[AdminUserOut])
 async def list_users(
-    search: str | None = None, limit: int = Query(default=50, le=200), offset: int = 0,
+    search: str | None = None, country: str | None = None, limit: int = Query(default=50, le=200), offset: int = 0,
     admin: User = Depends(get_current_admin), db: AsyncSession = Depends(get_db),
 ):
-    rows = await service.list_users(db, search, limit, offset)
+    rows = await service.list_users(db, search, limit, offset, country)
     return [
         AdminUserOut(
             id=r["user"].id, email=r["user"].email, username=r["profile"].username,

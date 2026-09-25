@@ -45,7 +45,7 @@ a real matchmaking engine with an automated test suite, and a real Next.js front
 - Admin: user suspend/ban, mystery CRUD + publish workflow, report review queue, category enable/disable, a
   real AI-backed mystery generation pipeline (see below), and an analytics endpoint (DAU/MAU/retention, matches
   and completions per user, average session length).
-- **123 automated test functions** written against a real Postgres + Redis instance (see `apps/api/tests/`)
+- **130 automated test functions** written against a real Postgres + Redis instance (see `apps/api/tests/`)
   covering every invariant above, not mocks. Run them with `pytest -v` from `apps/api`.
 
 **Frontend (Next.js 16 + React 19 + Tailwind v4) — fully functional:**
@@ -346,7 +346,7 @@ pairza/
 │   │   │   └── common/          # db, redis, security, shared deps
 │   │   ├── alembic/             # migrations
 │   │   ├── scripts/             # seed.py (demo data), generate_mysteries.py + validate_mystery.py (AI pipeline)
-│   │   └── tests/               # 123 test functions, real Postgres + Redis
+│   │   └── tests/               # 130 test functions, real Postgres + Redis
 │   └── web/                     # Next.js frontend
 │       ├── app/                 # routes (landing, auth, home, mystery, vault, profile, admin)
 │       ├── components/          # UI primitives + feature components

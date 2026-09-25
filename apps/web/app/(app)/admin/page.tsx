@@ -27,8 +27,9 @@ import {
   useTriggerGeneration,
 } from "@/features/admin/hooks";
 import { CATEGORY_LABELS } from "@/types";
-import { formatCountdown } from "@/lib/utils";
-import { formatTimeLimit } from "@/lib/session-clock";
+import { formatCountdown, countryCodeToFlag } from "@/lib/utils";
+import { COUNTRIES } from "@/lib/countries";import { formatTimeLimit } from "@/lib/session-clock";
+import { useUserCountsByCountry } from "@/features/admin/hooks";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -184,23 +185,45 @@ function OverviewTab() {
   );
 }
 
+const COUNTRY_NAMES = Object.fromEntries(COUNTRIES) as Record<string, string>;
+
 function UsersTab() {
   const [search, setSearch] = useState("");
-  const { data: users } = useAdminUsers(search);
+  const [country, setCountry] = useState("");
+  const { data: users } = useAdminUsers(search, country);
+  const { data: countryCounts } = useUserCountsByCountry();
   const suspend = useSuspendUser();
   const ban = useBanUser();
 
+  const totalUsers = countryCounts?.reduce((sum, c) => sum + c.user_count, 0) ?? 0;
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
-        <Input placeholder="Search by email or username" className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+          <Input placeholder="Search by email or username" className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <select
+          className="h-9 rounded-lg border border-border-subtle bg-void-elevated-2 px-3 text-sm text-ink"
+          value={country}
+          onChange={(e) => setCountry(e.target.value)}
+          aria-label="Filter by country"
+        >
+          <option value="">All countries{totalUsers ? ` (${totalUsers})` : ""}</option>
+          {countryCounts?.map((c) => (
+            <option key={c.country_code} value={c.country_code}>
+              {countryCodeToFlag(c.country_code)} {COUNTRY_NAMES[c.country_code] ?? c.country_code} ({c.user_count})
+            </option>
+          ))}
+        </select>
       </div>
       <div className="overflow-x-auto rounded-xl border border-border-subtle">
         <table className="w-full text-sm">
           <thead className="border-b border-border-subtle bg-white/5 text-left text-xs uppercase text-ink-faint">
             <tr>
               <th className="p-3">User</th>
+              <th className="p-3">Country</th>
               <th className="p-3">Stats</th>
               <th className="p-3">Status</th>
               <th className="p-3">Actions</th>
@@ -212,6 +235,11 @@ function UsersTab() {
                 <td className="p-3">
                   <p className="font-medium text-ink">{u.username}</p>
                   <p className="text-xs text-ink-faint">{u.email}</p>
+                </td>
+                <td className="p-3 text-ink-muted">
+                  <span title={COUNTRY_NAMES[u.country_code] ?? u.country_code}>
+                    {countryCodeToFlag(u.country_code)} {u.country_code}
+                  </span>
                 </td>
                 <td className="p-3 text-ink-muted">
                   {u.solved_count}/{u.mystery_count} solved

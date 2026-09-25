@@ -16,14 +16,30 @@ from app.sessions.models import MysterySession, UserMysteryHistory
 from app.users.models import Profile, User, UserDailyActivity
 
 
-async def list_users(db: AsyncSession, search: str | None, limit: int, offset: int) -> list[dict]:
+async def list_users(
+    db: AsyncSession, search: str | None, limit: int, offset: int, country: str | None = None
+) -> list[dict]:
     query = select(User, Profile).join(Profile, Profile.user_id == User.id)
     if search:
         like = f"%{search}%"
         query = query.where(or_(User.email.ilike(like), Profile.username.ilike(like)))
+    if country:
+        query = query.where(Profile.country_code == country.strip().upper())
     query = query.order_by(User.created_at.desc()).limit(limit).offset(offset)
     rows = (await db.execute(query)).all()
     return [{"user": u, "profile": p} for u, p in rows]
+
+
+async def get_user_counts_by_country(db: AsyncSession) -> list[dict]:
+    """How many users have joined from each country — every profile has exactly one country
+    (required at registration, see RegisterRequest.country_code), so this is a simple group-by,
+    not an estimate. Powers the admin panel's country filter and its per-country counts."""
+    result = await db.execute(
+        select(Profile.country_code, func.count(Profile.id))
+        .group_by(Profile.country_code)
+        .order_by(func.count(Profile.id).desc())
+    )
+    return [{"country_code": country_code, "user_count": count} for country_code, count in result.all()]
 
 
 async def _get_user(db: AsyncSession, user_id: uuid.UUID) -> User:

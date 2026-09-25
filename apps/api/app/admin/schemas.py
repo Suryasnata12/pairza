@@ -22,6 +22,11 @@ class AdminUserOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CountryCountOut(BaseModel):
+    country_code: str
+    user_count: int
+
+
 class SuspendUserRequest(BaseModel):
     reason: str
 

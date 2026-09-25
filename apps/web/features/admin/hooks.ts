@@ -66,10 +66,30 @@ export function useAdminAnalytics() {
   return useQuery({ queryKey: ["admin", "analytics"], queryFn: () => api.get<Analytics>("/admin/analytics") });
 }
 
-export function useAdminUsers(search: string) {
+export interface CountryCount {
+  country_code: string;
+  user_count: number;
+}
+
+export function useAdminUsers(search: string, country: string) {
   return useQuery({
-    queryKey: ["admin", "users", search],
-    queryFn: () => api.get<AdminUser[]>(`/admin/users${search ? `?search=${encodeURIComponent(search)}` : ""}`),
+    queryKey: ["admin", "users", search, country],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (search) params.set("search", search);
+      if (country) params.set("country", country);
+      const query = params.toString();
+      return api.get<AdminUser[]>(`/admin/users${query ? `?${query}` : ""}`);
+    },
+  });
+}
+
+/** Every country with at least one user, most users first — powers the country filter's
+ * options AND the per-country counts shown next to each one, from a single request. */
+export function useUserCountsByCountry() {
+  return useQuery({
+    queryKey: ["admin", "users", "countries"],
+    queryFn: () => api.get<CountryCount[]>("/admin/users/countries"),
   });
 }
 
