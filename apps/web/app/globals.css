@@ -44,6 +44,7 @@
   --animate-thread-glow: thread-glow 2.4s ease-in-out infinite;
   --animate-drift: drift 22s ease-in-out infinite;
   --animate-fade-up: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-signal-ring: signal-ring 2.8s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
 }
 
 @keyframes pulse-urgent {
@@ -61,6 +62,12 @@
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
+}
+/* A signal being broadcast outward — the "ready to start" screen's icon uses three of these,
+   staggered, so the compass reads as actively searching rather than sitting still. */
+@keyframes signal-ring {
+  0% { transform: scale(0.85); opacity: 0.55; }
+  100% { transform: scale(1.9); opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
