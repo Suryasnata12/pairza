@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pairza_dev_password}
       POSTGRES_DB: pairza
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"  # host-only: never expose the database to the public internet
     volumes:
       - pairza_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +20,7 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"  # host-only: Redis has no password, so this must never be public
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

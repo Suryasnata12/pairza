@@ -45,7 +45,7 @@ a real matchmaking engine with an automated test suite, and a real Next.js front
 - Admin: user suspend/ban, mystery CRUD + publish workflow, report review queue, category enable/disable, a
   real AI-backed mystery generation pipeline (see below), and an analytics endpoint (DAU/MAU/retention, matches
   and completions per user, average session length).
-- **130 automated test functions** written against a real Postgres + Redis instance (see `apps/api/tests/`)
+- **145 automated test functions** written against a real Postgres + Redis instance (see `apps/api/tests/`)
   covering every invariant above, not mocks. Run them with `pytest -v` from `apps/api`.
 
 **Frontend (Next.js 16 + React 19 + Tailwind v4) — fully functional:**
@@ -209,6 +209,29 @@ the pair's mystery:
 `difficulty_rank` is separate from `UserPreferences.puzzle_experience_level`, which stays a
 one-time, self-reported label shown back to the player and never touched by gameplay.
 
+## Deploying beyond your own machine
+
+A few things in the default configuration are deliberately permissive for local development and
+need attention before Pairza is reachable by anyone else:
+
+- **`JWT_SECRET`**: the API refuses to start with the default value once `ENVIRONMENT` is
+  anything other than `development` — generate a real one with `openssl rand -hex 32`.
+- **Postgres and Redis are bound to `127.0.0.1` only** (`docker-compose.yml`), reachable from the
+  host machine but not the public internet. Redis in particular has no password.
+- **`TRUSTED_PROXY_IPS`**: if you put Pairza behind a reverse proxy or tunnel (Cloudflare Tunnel,
+  ngrok, nginx) — which you'll likely need anyway for HTTPS if you don't have a domain — set this
+  to that proxy's own address so the login rate limiter sees each real visitor's IP instead of
+  treating every request as coming from the proxy. Leave it empty for a bare `docker compose up`.
+  See the comment on this setting in `.env.example` / `app/config/settings.py` for why an
+  unconfigured client-supplied header is never trusted by default.
+- **`CORS_ORIGINS`** and **`GOOGLE_REDIRECT_URI`** need updating to wherever the frontend is
+  actually served.
+- **A real email sender** (`SMTP_HOST` and friends) is required for password reset to actually
+  deliver mail — without it, reset links are only logged, not sent.
+- **Getting HTTPS without owning a domain**: a tunnel service (Cloudflare Tunnel, ngrok) issues a
+  real HTTPS hostname pointed at your machine for free. This also satisfies Google OAuth, which
+  generally won't accept a bare IP address as a redirect URI.
+
 ## Quick start (Docker — recommended)
 
 Requires Docker and Docker Compose.
@@ -346,7 +369,7 @@ pairza/
 │   │   │   └── common/          # db, redis, security, shared deps
 │   │   ├── alembic/             # migrations
 │   │   ├── scripts/             # seed.py (demo data), generate_mysteries.py + validate_mystery.py (AI pipeline)
-│   │   └── tests/               # 130 test functions, real Postgres + Redis
+│   │   └── tests/               # 145 test functions, real Postgres + Redis
 │   └── web/                     # Next.js frontend
 │       ├── app/                 # routes (landing, auth, home, mystery, vault, profile, admin)
 │       ├── components/          # UI primitives + feature components

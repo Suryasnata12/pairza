@@ -42,6 +42,16 @@ class Settings(BaseSettings):
     # --- CORS ---
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
 
+    # Comma-separated IPs/CIDRs of a reverse proxy or tunnel client (e.g. cloudflared, ngrok,
+    # nginx) that Pairza should trust to set X-Forwarded-For. Empty (the default) means: trust
+    # nothing, and request.client.host is whatever actually opened the TCP connection — correct
+    # for a bare `docker compose up` with nothing in front of it, and safe by default, since an
+    # untrusted X-Forwarded-For can be forged by anyone to fake a different IP on every request
+    # (defeating the login rate limiter). Set this to the proxy's own IP — e.g. "127.0.0.1" for a
+    # tunnel client running on the same host — ONLY when such a proxy genuinely sits in front of
+    # this API and strips/re-adds that header itself; see app/main.py's ProxyHeadersMiddleware.
+    TRUSTED_PROXY_IPS: str = ""
+
     # --- Session / game rules ---
     # A session's LENGTH is not configured here — it's derived from the
     # mystery's difficulty (see app/mysteries/difficulty.py). Old

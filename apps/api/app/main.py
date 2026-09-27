@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.admin.router import router as admin_router
 from app.auth.router import router as auth_router
@@ -24,6 +25,21 @@ from app.websockets.router import router as websockets_router
 settings = get_settings()
 logger = logging.getLogger("pairza")
 
+DEFAULT_JWT_SECRET = "change-me-in-production"
+
+
+def _reject_insecure_startup_config() -> None:
+    """
+    Refuses to start rather than run with a forgeable JWT secret. Development is exempt so a
+    fresh clone with an untouched .env.example still runs — this only fires when ENVIRONMENT is
+    anything else, i.e. someone believes this is a real deployment.
+    """
+    if settings.ENVIRONMENT != "development" and settings.JWT_SECRET == DEFAULT_JWT_SECRET:
+        raise RuntimeError(
+            "JWT_SECRET is still the default value. Anyone who knows this default can forge a "
+            "login token for any account. Set a real, random JWT_SECRET before running with "
+            'ENVIRONMENT != "development".'
+        )
 
 
 async def _background_sweeper() -> None:
@@ -44,6 +60,7 @@ async def _background_sweeper() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _reject_insecure_startup_config()
     task = asyncio.create_task(_background_sweeper())
     yield
     task.cancel()
@@ -79,3 +96,10 @@ app.include_router(rewards_router)
 app.include_router(moderation_router)
 app.include_router(admin_router)
 app.include_router(websockets_router)
+
+if settings.TRUSTED_PROXY_IPS:
+    # Only takes effect when explicitly configured (see TRUSTED_PROXY_IPS in settings.py) —
+    # corrects request.client.host from a trusted reverse proxy/tunnel's X-Forwarded-For, so
+    # the login rate limiter (app/common/deps.py) sees each real visitor's IP instead of every
+    # request appearing to come from the proxy itself.
+    app = ProxyHeadersMiddleware(app, trusted_hosts=settings.TRUSTED_PROXY_IPS)

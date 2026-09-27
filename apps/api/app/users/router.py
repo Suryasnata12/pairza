@@ -57,10 +57,23 @@ async def update_preferences(
 
 
 @router.get("/{user_id}", response_model=ProfileResponse)
-async def get_public_profile(user_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    """Public, achievement-only view of another player — used from the Memory Vault / stranger card."""
-    result = await db.execute(select(Profile).where(Profile.user_id == user_id))
-    profile = result.scalar_one_or_none()
-    if not profile:
+async def get_public_profile(
+    user_id: uuid.UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    """
+    Achievement-only view of another player — used from the Memory Vault / stranger card, both
+    already login-only features in the app, so requiring login here closes nothing a legitimate
+    caller needs. Requiring auth also means every lookup is now attributable to a real account,
+    rather than open to anonymous scraping of every user's stats by iterating user IDs.
+
+    A banned or deactivated account is treated the same as one that doesn't exist: there's no
+    reason to let anyone keep viewing a profile Pairza itself has already taken action on.
+    """
+    result = await db.execute(select(Profile, User).join(User, User.id == Profile.user_id).where(Profile.user_id == user_id))
+    row = result.one_or_none()
+    if row is None:
+        raise NotFoundError("That player doesn't exist.")
+    profile, target_user = row
+    if not target_user.is_active or target_user.is_banned:
         raise NotFoundError("That player doesn't exist.")
     return await service.build_profile_response(db, profile)

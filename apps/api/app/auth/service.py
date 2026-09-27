@@ -24,16 +24,28 @@ settings = get_settings()
 
 
 async def register_user(db: AsyncSession, payload: RegisterRequest) -> User:
-    existing_email = await db.execute(select(User).where(User.email == payload.email))
+    # Normalized once, here, so every later lookup (login, this duplicate check, Google linking
+    # in resolve_google_user) is comparing the same canonical form. No real mail provider treats
+    # "Bob@x.com" and "bob@x.com" as different mailboxes, so treating them as the same account is
+    # matching reality, not just convenience — the alternative is two accounts that both believe
+    # they own the one inbox that can actually receive a password-reset link.
+    email = payload.email.strip().lower()
+
+    existing_email = await db.execute(select(User).where(func.lower(User.email) == email))
     if existing_email.scalar_one_or_none():
         raise ConflictError("An account with that email already exists.", code="email_taken")
 
-    existing_username = await db.execute(select(Profile).where(Profile.username == payload.username))
+    # Username keeps its typed casing for display (a profile reads better as "CoolName" than
+    # forced to lowercase) — only the uniqueness check is case-insensitive, so "CoolName" and
+    # "coolname" can't both be claimed as if they were different people.
+    existing_username = await db.execute(
+        select(Profile).where(func.lower(Profile.username) == payload.username.strip().lower())
+    )
     if existing_username.scalar_one_or_none():
         raise ConflictError("That username is already taken.", code="username_taken")
 
     user = User(
-        email=payload.email,
+        email=email,
         hashed_password=hash_password(payload.password),
         is_verified=False,
     )
@@ -49,7 +61,7 @@ async def register_user(db: AsyncSession, payload: RegisterRequest) -> User:
 
 
 async def authenticate_user(db: AsyncSession, email: str, password: str) -> User:
-    result = await db.execute(select(User).where(User.email == email))
+    result = await db.execute(select(User).where(func.lower(User.email) == email.strip().lower()))
     user = result.scalar_one_or_none()
 
     # Constant-shape error whether the email doesn't exist or the password is
