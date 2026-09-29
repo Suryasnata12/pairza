@@ -79,6 +79,7 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = "noreply@pairza.app"
     SMTP_USE_TLS: bool = True
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
+    EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours — less time-sensitive than a password reset
 
     # --- Frontend URLs (for links in emails etc.) ---
     FRONTEND_URL: str = "http://localhost:3000"

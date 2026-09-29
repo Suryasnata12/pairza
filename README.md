@@ -45,7 +45,7 @@ a real matchmaking engine with an automated test suite, and a real Next.js front
 - Admin: user suspend/ban, mystery CRUD + publish workflow, report review queue, category enable/disable, a
   real AI-backed mystery generation pipeline (see below), and an analytics endpoint (DAU/MAU/retention, matches
   and completions per user, average session length).
-- **145 automated test functions** written against a real Postgres + Redis instance (see `apps/api/tests/`)
+- **155 automated test functions** written against a real Postgres + Redis instance (see `apps/api/tests/`)
   covering every invariant above, not mocks. Run them with `pytest -v` from `apps/api`.
 
 **Frontend (Next.js 16 + React 19 + Tailwind v4) — fully functional:**
@@ -120,6 +120,32 @@ setting.
 
 Frontend pages: `/forgot-password`, `/reset-password` (reads `?token=` from the emailed link),
 and `/forgot-username`, linked from the login page.
+
+## Email verification
+
+A password signup starts with `is_verified=False` and is sent a verification link
+(`auth/service.py`'s `send_verification_email`, built on the same `app/common/email.py` sender as
+password reset). A Google-created account is already verified from the start — Google itself
+proved the email (see `resolve_google_user`) — and never goes through this flow.
+
+- **`POST /api/auth/verify-email`** — takes the token from the emailed link, marks the account
+  verified. Tokens are single-use, expire after `EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES` (default
+  24 hours), and only a SHA-256 hash of each is stored (`email_verification_tokens`), the same
+  principle as password reset tokens.
+- **`POST /api/auth/resend-verification`** — authenticated only: the caller must already be signed
+  into the account being verified, so it can't be used to spam an address you don't control or to
+  check which accounts exist. Requesting a new link invalidates the previous one. A no-op if
+  already verified.
+- **The gate**: an unverified account can register, sign in, and browse — but `POST
+  /api/matchmaking/join` returns `409 email_not_verified` until it's verified. The home screen
+  shows a banner with a resend button for unverified accounts.
+
+**What this doesn't do:** it doesn't let the *real* owner of an email reclaim it if someone else
+registered it first — that address still reads as "already taken". The squatter's account is
+just unable to play. Freeing squatted addresses would mean expiring accounts that stay unverified
+for some number of days, which is a separate decision this pass deliberately doesn't make.
+
+Frontend: `/verify-email` (reads `?token=` from the emailed link) plus the home-screen banner.
 
 ## Difficulty & time limits
 
@@ -369,7 +395,7 @@ pairza/
 │   │   │   └── common/          # db, redis, security, shared deps
 │   │   ├── alembic/             # migrations
 │   │   ├── scripts/             # seed.py (demo data), generate_mysteries.py + validate_mystery.py (AI pipeline)
-│   │   └── tests/               # 145 test functions, real Postgres + Redis
+│   │   └── tests/               # 155 test functions, real Postgres + Redis
 │   └── web/                     # Next.js frontend
 │       ├── app/                 # routes (landing, auth, home, mystery, vault, profile, admin)
 │       ├── components/          # UI primitives + feature components

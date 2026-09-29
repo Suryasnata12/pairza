@@ -59,3 +59,6 @@ class ResetPasswordRequest(BaseModel):
 class ForgotUsernameRequest(BaseModel):
     username: str
 
+
+class VerifyEmailRequest(BaseModel):
+    token: str

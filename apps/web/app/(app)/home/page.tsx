@@ -3,14 +3,17 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, type Variants } from "framer-motion";
-import { ArrowRight, Compass, Radar, Sparkles } from "lucide-react";
+import { ArrowRight, Compass, MailWarning, Radar, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { MysteryReveal } from "@/components/mystery/mystery-reveal";
 import { useCurrentSession } from "@/features/session/hooks";
 import { useJoinMatchmaking, useMatchmakingStatus } from "@/features/matchmaking/hooks";
+import { useResendVerification } from "@/features/auth/hooks";
+import { ApiError } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { CATEGORY_LABELS } from "@/types";
+import { toast } from "sonner";
 
 function hasSeenReveal(sessionId: string): boolean {
   if (typeof window === "undefined") return false;
@@ -25,6 +28,7 @@ export default function HomePage() {
   const me = useAuthStore((s) => s.me);
   const { data: session, isLoading: sessionLoading } = useCurrentSession();
   const join = useJoinMatchmaking();
+  const resendVerification = useResendVerification();
   const { data: matchStatus } = useMatchmakingStatus(!session && !sessionLoading);
   const [showReveal, setShowReveal] = useState(false);
 
@@ -143,11 +147,54 @@ export default function HomePage() {
           <Sparkles className="h-3.5 w-3.5" /> {me.profile.current_streak}-day streak — keep it alive
         </motion.div>
       )}
+      {me && !me.is_verified && (
+        <motion.div
+          variants={ENTRANCE}
+          className="flex w-full max-w-md flex-col items-center gap-3 rounded-xl border border-gold/30 bg-gold/5 p-4 text-sm"
+        >
+          <div className="flex items-center gap-2 text-gold">
+            <MailWarning className="h-4 w-4" /> Verify your email to start matching
+          </div>
+          <p className="text-ink-muted">
+            We sent a link to {me.email}. You can look around, but you'll need to confirm it before entering a mystery.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={resendVerification.isPending || resendVerification.isSuccess}
+            onClick={() =>
+              resendVerification.mutate(undefined, {
+                onSuccess: () => toast.success("Sent — check your inbox."),
+                onError: () => toast.error("Couldn't resend the email. Try again in a moment."),
+              })
+            }
+          >
+            {resendVerification.isSuccess ? "Sent" : resendVerification.isPending ? "Sending…" : "Resend email"}
+          </Button>
+        </motion.div>
+      )}
       <motion.div variants={ENTRANCE} className="relative">
         {/* A soft breathing glow behind the button — the one thing on this screen asking to be
             clicked, so it's the one thing that keeps moving once everything else has settled. */}
         <span className="absolute inset-0 -z-10 rounded-xl bg-signal-teal/50 blur-xl animate-thread-glow" />
-        <Button size="lg" onClick={() => join.mutate()} disabled={join.isPending}>
+        <Button
+          size="lg"
+          onClick={() =>
+            join.mutate(undefined, {
+              onError: (err) => {
+                // The backend gate (matchmaking/service.py) is the source of truth; the banner
+                // above is a courtesy. This catches the case where someone clicks anyway, or the
+                // banner's is_verified is momentarily stale.
+                toast.error(
+                  err instanceof ApiError && err.code === "email_not_verified"
+                    ? "Verify your email first — check your inbox for the link."
+                    : "Couldn't open the door. Try again."
+                );
+              },
+            })
+          }
+          disabled={join.isPending}
+        >
           {join.isPending ? "Opening the door…" : "Enter today's mystery"} <ArrowRight className="h-4 w-4" />
         </Button>
       </motion.div>

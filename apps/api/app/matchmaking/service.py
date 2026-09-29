@@ -106,6 +106,13 @@ async def join_matchmaking(db: AsyncSession, redis: Redis, user: User) -> dict:
     if user.is_suspended or user.is_banned:
         raise ConflictError("This account can't join matchmaking right now.", code="account_restricted")
 
+    if not user.is_verified:
+        # Google accounts are already verified (Google itself proved the email — see
+        # resolve_google_user); this only affects a password signup that hasn't confirmed the
+        # email it registered with yet. See auth/service.py's send_verification_email /
+        # resend_verification_email for how a player gets or re-requests the link.
+        raise ConflictError("Verify your email before joining matchmaking.", code="email_not_verified")
+
     # Critical section: pop-a-partner-and-create-session must be atomic
     # across concurrent requests, or two different callers could both grab
     # the same waiting user and create two sessions for them.

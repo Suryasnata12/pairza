@@ -18,7 +18,7 @@ from app.common.security import (
     verify_password,
 )
 from app.config.settings import get_settings
-from app.users.models import PasswordResetToken, Profile, RefreshToken, User, UserPreferences
+from app.users.models import EmailVerificationToken, PasswordResetToken, Profile, RefreshToken, User, UserPreferences
 
 settings = get_settings()
 
@@ -362,4 +362,82 @@ async def request_username_reminder(db: AsyncSession, username: str) -> None:
         f"This address — {user.email} — is the one to sign in with.\n\n"
         "If you didn't request this, you can safely ignore this email.",
     )
+
+
+# --- Email verification ----------------------------------------------------------------------
+#
+# Unlike request_password_reset / request_username_reminder, these are NOT trying to hide
+# whether an account exists — the caller either just created the account (send_verification_email)
+# or is already logged into it (resend_verification_email), so there's no enumeration surface to
+# protect here. A Google-created account is already is_verified=True (resolve_google_user already
+# had Google itself prove the email) and never needs one of these tokens at all.
+
+def _hash_verification_token(raw_token: str) -> str:
+    """SHA-256 of the raw token — same principle as PasswordResetToken: only the hash is stored."""
+    return hashlib.sha256(raw_token.encode()).hexdigest()
+
+
+async def send_verification_email(db: AsyncSession, user: User) -> None:
+    """Called once at registration (see auth/router.py's register endpoint) and again on demand
+    from resend_verification_email. Invalidates any earlier unused token for this user first, so
+    only the most recently sent link ever works — the same pattern request_password_reset uses."""
+    await db.execute(
+        update(EmailVerificationToken)
+        .where(EmailVerificationToken.user_id == user.id, EmailVerificationToken.used_at.is_(None))
+        .values(used_at=utcnow())
+    )
+
+    raw_token = secrets.token_urlsafe(_RESET_TOKEN_BYTES)
+    db.add(EmailVerificationToken(
+        user_id=user.id,
+        token_hash=_hash_verification_token(raw_token),
+        expires_at=utcnow() + timedelta(minutes=settings.EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES),
+        created_at=utcnow(),
+    ))
+    await db.commit()
+
+    verify_link = f"{settings.FRONTEND_URL}/verify-email?token={raw_token}"
+    send_email(
+        user.email,
+        "Verify your Pairza email",
+        "Welcome to Pairza! Confirm this is your email address to start matching with strangers.\n\n"
+        f"Verify your email: {verify_link}\n\n"
+        f"This link expires in {settings.EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES // 60} hours.\n\n"
+        "If you didn't create a Pairza account, you can safely ignore this email.",
+    )
+
+
+async def verify_email(db: AsyncSession, raw_token: str) -> None:
+    token_hash = _hash_verification_token(raw_token)
+    result = await db.execute(select(EmailVerificationToken).where(EmailVerificationToken.token_hash == token_hash))
+    verification_token = result.scalar_one_or_none()
+
+    now = utcnow()
+    if (
+        verification_token is None
+        or verification_token.used_at is not None
+        or verification_token.expires_at.replace(tzinfo=timezone.utc) < now
+    ):
+        raise UnauthorizedError(
+            "This verification link is invalid or has expired. Request a new one from your account.",
+            code="invalid_verification_token",
+        )
+
+    user_result = await db.execute(select(User).where(User.id == verification_token.user_id))
+    user = user_result.scalar_one_or_none()
+    if user is None:
+        raise UnauthorizedError("This account no longer exists.", code="invalid_verification_token")
+
+    verification_token.used_at = now  # single-use, even on a correct token
+    user.is_verified = True
+    await db.commit()
+
+
+async def resend_verification_email(db: AsyncSession, user: User) -> None:
+    """Authenticated only — the caller must already be logged into the account being verified,
+    so this can't be used to spam an email address the caller doesn't control, or to enumerate
+    which accounts exist. A no-op if already verified, so it's always safe to call."""
+    if user.is_verified:
+        return
+    await send_verification_email(db, user)
 

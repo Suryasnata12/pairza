@@ -11,6 +11,7 @@ from app.auth.schemas import (
     LoginRequest,
     RegisterRequest,
     ResetPasswordRequest,
+    VerifyEmailRequest,
 )
 from app.common.database import get_db
 from app.common.deps import enforce_rate_limit, get_current_user
@@ -43,6 +44,7 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
 async def register(payload: RegisterRequest, response: Response, request: Request, db: AsyncSession = Depends(get_db)):
     await enforce_rate_limit("auth_register", request.client.host, settings.RATE_LIMIT_AUTH_ATTEMPTS_PER_MINUTE)
     user = await service.register_user(db, payload)
+    await service.send_verification_email(db, user)
     access_token, refresh_token = await service.issue_token_pair(db, user)
     _set_auth_cookies(response, access_token, refresh_token)
     return AuthUserResponse(id=user.id, email=user.email, username=payload.username, is_verified=user.is_verified, is_admin=user.is_admin)
@@ -92,6 +94,23 @@ async def reset_password(payload: ResetPasswordRequest, request: Request, db: As
     await enforce_rate_limit("auth_reset_password", request.client.host, settings.RATE_LIMIT_AUTH_ATTEMPTS_PER_MINUTE)
     await service.reset_password(db, payload.token, payload.new_password)
     return {"message": "Your password has been reset. Please sign in with your new password."}
+
+
+@router.post("/verify-email")
+async def verify_email(payload: VerifyEmailRequest, db: AsyncSession = Depends(get_db)):
+    await service.verify_email(db, payload.token)
+    return {"message": "Your email is verified. You can now join matchmaking."}
+
+
+@router.post("/resend-verification")
+async def resend_verification(
+    request: Request, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    """Authenticated: the caller must already be logged into the account this resends for —
+    see service.resend_verification_email's docstring for why that's the whole safeguard here."""
+    await enforce_rate_limit("auth_resend_verification", request.client.host, settings.RATE_LIMIT_AUTH_ATTEMPTS_PER_MINUTE)
+    await service.resend_verification_email(db, user)
+    return {"message": "If your email isn't verified yet, a new link is on its way."}
 
 
 @router.post("/forgot-username", status_code=202)

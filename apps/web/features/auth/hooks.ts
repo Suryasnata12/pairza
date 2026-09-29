@@ -1,5 +1,5 @@
 "use client";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { refreshMe } from "@/app/providers/auth-provider";
@@ -54,5 +54,19 @@ export function useResetPassword() {
 export function useForgotUsername() {
   return useMutation({
     mutationFn: (username: string) => api.post<{ message: string }>("/auth/forgot-username", { username }),
+  });
+}
+
+export function useVerifyEmail() {
+  return useMutation({
+    mutationFn: (token: string) => api.post<{ message: string }>("/auth/verify-email", { token }),
+  });
+}
+
+export function useResendVerification() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ message: string }>("/auth/resend-verification"),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["users", "me"] }),
   });
 }
