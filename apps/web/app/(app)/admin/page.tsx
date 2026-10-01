@@ -389,7 +389,7 @@ function CategoryPoolSection() {
         <CardContent className="flex flex-col gap-3 pt-0">
           <p className="text-xs text-ink-faint">
             Runs the AI generation pipeline (structural + duplicate + semantic validation) and saves only what
-            passes. Requires ANTHROPIC_API_KEY to be configured on the server — see .env.example.
+            passes. Requires GEMINI_API_KEY to be configured on the server — see .env.example.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-1.5 text-sm text-ink-muted">

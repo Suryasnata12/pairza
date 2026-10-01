@@ -345,10 +345,12 @@ Beyond the hand-authored seed mysteries, Pairza can generate new ones with a rea
 structural validation → duplicate detection → semantic review → save. Nothing here runs during live gameplay —
 it's strictly an offline/admin tool, either from the command line or the admin panel's **Mysteries** tab.
 
-**Setup:** get an API key at https://console.anthropic.com, then add it to your `.env`:
+**Setup:** get an API key at https://aistudio.google.com/apikey, then add it to your `.env`:
 ```
-ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=...
 ```
+The model (`MYSTERY_GENERATOR_MODEL`, default `gemini-3.5-flash-lite`) is called through a small shared client,
+`apps/api/app/ai/gemini.py`, used by both the generator and the semantic validator below.
 Leave it blank to skip this feature entirely — everything else in the app works fine without it.
 
 **From the command line:**

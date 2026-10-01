@@ -96,12 +96,13 @@ class Settings(BaseSettings):
     ADMIN_USER_PASSWORD: str = "PairzaAdmin123!"
     SEED_USER_PASSWORD: str = "SeedPassword123!"
 
-    # --- AI mystery generation (scripts/generate_mysteries.py) ---
-    # Never used at request-serving time — only by the offline CLI script.
-    # Leaving ANTHROPIC_API_KEY blank makes the script fail fast with a
-    # clear message rather than a confusing HTTP error.
-    ANTHROPIC_API_KEY: str = ""
-    MYSTERY_GENERATOR_MODEL: str = "claude-sonnet-4-6"
+    # --- AI mystery generation (scripts/generate_mysteries.py, scripts/validate_mystery.py) ---
+    # Never used at request-serving time — only by the offline CLI script and the admin
+    # panel's "Generate more" button (which runs the same script as a background task).
+    # Leaving GEMINI_API_KEY blank makes both fail fast with a clear message (see
+    # app/ai/gemini.py's GeminiConfigError) rather than a confusing HTTP error.
+    GEMINI_API_KEY: str = ""
+    MYSTERY_GENERATOR_MODEL: str = "gemini-3.5-flash-lite"
     # If True, mysteries that pass every validation stage go straight to
     # PUBLISHED (playable immediately). If False, they stop at VALIDATED
     # and an admin must explicitly publish each one — see section 10 of

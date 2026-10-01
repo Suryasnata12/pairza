@@ -31,12 +31,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.ai.gemini import call_gemini
 from app.common.database import AsyncSessionLocal
 from app.config.settings import get_settings
 from app.mysteries.difficulty import DIFFICULTY_TIERS, MAX_DIFFICULTY, MIN_DIFFICULTY, get_difficulty_tier
 from app.mysteries.models import MYSTERY_CATEGORIES, Mystery, MysteryClue, MysteryStage
 from app.mysteries.schemas import MysteryCandidate
-from scripts.validate_mystery import _call_anthropic, _extract_json, validate_mystery
+from scripts.validate_mystery import _extract_json, validate_mystery
 
 settings = get_settings()
 
@@ -140,7 +141,7 @@ async def generate_one_candidate(db: AsyncSession, category: str, difficulty: in
         difficulty_style=tier.style, time_limit_minutes=tier.time_limit_minutes,
         category_guidance=CATEGORY_GUIDANCE.get(category, "an original puzzle concept"), example=example,
     )
-    raw_response = await _call_anthropic(prompt, settings.ANTHROPIC_API_KEY, settings.MYSTERY_GENERATOR_MODEL)
+    raw_response = await call_gemini(prompt, settings.GEMINI_API_KEY, settings.MYSTERY_GENERATOR_MODEL)
     return _extract_json(raw_response)
 
 
@@ -175,8 +176,8 @@ async def generate_for_category(
         "rejected": 0, "valid": 0, "saved": 0, "rejections": [],
     }
 
-    if not settings.ANTHROPIC_API_KEY:
-        stats["rejections"].append("ANTHROPIC_API_KEY is not configured — see .env.example.")
+    if not settings.GEMINI_API_KEY:
+        stats["rejections"].append("GEMINI_API_KEY is not configured — see .env.example.")
         return stats
 
     saved = 0
@@ -191,7 +192,7 @@ async def generate_for_category(
             stats["rejections"].append(f"Attempt {stats['attempts']}: generation call failed ({exc}).")
             continue
 
-        candidate, result = await validate_mystery(db, raw, settings.ANTHROPIC_API_KEY, settings.MYSTERY_GENERATOR_MODEL)
+        candidate, result = await validate_mystery(db, raw, settings.GEMINI_API_KEY, settings.MYSTERY_GENERATOR_MODEL)
         if not result.is_valid:
             stats["rejected"] += 1
             stats["rejections"].append(f"Attempt {stats['attempts']} ({result.stage}): {result.reason}")

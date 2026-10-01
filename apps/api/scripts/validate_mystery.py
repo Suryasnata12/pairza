@@ -25,11 +25,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import httpx
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.gemini import call_gemini
 from app.config.settings import get_settings
 from app.mysteries.difficulty import get_difficulty_tier
 from app.mysteries.models import MYSTERY_CATEGORIES, Mystery
@@ -38,7 +38,6 @@ from app.mysteries.service import normalize_answer
 
 settings = get_settings()
 
-ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 SEMANTIC_CONFIDENCE_THRESHOLD = 70  # 0-100; below this, reject the stage
 
 
@@ -191,18 +190,6 @@ Respond with ONLY a JSON object, no other text, in exactly this shape:
 """
 
 
-async def _call_anthropic(prompt: str, api_key: str, model: str) -> str:
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(
-            ANTHROPIC_API_URL,
-            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={"model": model, "max_tokens": 500, "messages": [{"role": "user", "content": prompt}]},
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        return "".join(block.get("text", "") for block in data.get("content", []) if block.get("type") == "text")
-
-
 def _extract_json(text: str) -> dict:
     """Models occasionally wrap JSON in prose or code fences despite instructions — this recovers it."""
     match = re.search(r"\{.*\}", text, re.DOTALL)
@@ -213,7 +200,7 @@ def _extract_json(text: str) -> dict:
 
 async def validate_semantics(candidate: MysteryCandidate, api_key: str, model: str) -> ValidationResult:
     if not api_key:
-        return ValidationResult.fail("semantic", "No ANTHROPIC_API_KEY configured — cannot run semantic validation.")
+        return ValidationResult.fail("semantic", "No GEMINI_API_KEY configured — cannot run semantic validation.")
 
     warnings: list[str] = []
     for stage in candidate.stages:
@@ -227,7 +214,7 @@ async def validate_semantics(candidate: MysteryCandidate, api_key: str, model: s
             context=stage.context or "(none given)", clue_a=clue_a, clue_b=clue_b, answers=", ".join(answers),
         )
         try:
-            raw_response = await _call_anthropic(prompt, api_key, model)
+            raw_response = await call_gemini(prompt, api_key, model)
             judgment = _extract_json(raw_response)
             confidence = int(judgment.get("confidence", 0))
             reason = str(judgment.get("reason", ""))
@@ -279,7 +266,7 @@ async def _main() -> None:
 
     async with AsyncSessionLocal() as db:
         candidate, result = await validate_mystery(
-            db, raw, settings.ANTHROPIC_API_KEY, settings.MYSTERY_GENERATOR_MODEL, skip_semantic
+            db, raw, settings.GEMINI_API_KEY, settings.MYSTERY_GENERATOR_MODEL, skip_semantic
         )
 
     print(f"Valid: {result.is_valid}")
