@@ -37,10 +37,10 @@ class Settings(BaseSettings):
     # --- OAuth (Google) ---
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
-    GOOGLE_REDIRECT_URI: str = "http://localhost:3000/auth/google/callback"
+    GOOGLE_REDIRECT_URI: str = "https://pairza-inky.vercel.app/auth/google/callback"
 
     # --- CORS ---
-    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: List[str] = ["https://pairza-inky.vercel.app"]
 
     # Comma-separated IPs/CIDRs of a reverse proxy or tunnel client (e.g. cloudflared, ngrok,
     # nginx) that Pairza should trust to set X-Forwarded-For. Empty (the default) means: trust
@@ -78,11 +78,13 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM_EMAIL: str = "noreply@pairza.app"
     SMTP_USE_TLS: bool = True
+    RESEND_API_KEY: str = ""
+    RESEND_FROM_EMAIL: str = "onboarding@resend.dev"
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
     EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours — less time-sensitive than a password reset
 
     # --- Frontend URLs (for links in emails etc.) ---
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str = "https://pairza-inky.vercel.app/"
 
     # --- Demo data credentials (scripts/seed_demo.py ONLY — never used at runtime, and
     # seed_demo.py itself refuses to run unless ENVIRONMENT=development) ---
