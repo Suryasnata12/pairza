@@ -1,7 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: "standalone",
+
+  // Use standalone for Docker/local builds,
+  // but disable it on Vercel.
+  output: process.env.VERCEL ? undefined : "standalone",
+
   async rewrites() {
     return [
       {
