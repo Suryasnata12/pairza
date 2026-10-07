@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.config.settings import get_settings
 from app.models_registry import Base
 
+
 config = context.config
 
 if config.config_file_name is not None:
@@ -16,34 +17,86 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+
+
+def get_async_database_url() -> str:
+    """
+    Convert Railway's PostgreSQL URL to an asyncpg-compatible URL.
+
+    Railway provides:
+        postgresql://...
+
+    SQLAlchemy async engine requires:
+        postgresql+asyncpg://...
+    """
+    database_url = settings.DATABASE_URL
+
+    if database_url.startswith("postgresql://"):
+        database_url = database_url.replace(
+            "postgresql://",
+            "postgresql+asyncpg://",
+            1,
+        )
+    elif database_url.startswith("postgres://"):
+        database_url = database_url.replace(
+            "postgres://",
+            "postgresql+asyncpg://",
+            1,
+        )
+
+    return database_url
+
+
+# Keep Alembic's configuration synchronized with the application settings.
+config.set_main_option(
+    "sqlalchemy.url",
+    settings.DATABASE_URL,
+)
 
 
 def run_migrations_offline() -> None:
+    """Run migrations in 'offline' mode."""
+
     url = settings.DATABASE_URL
+
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
+
     with context.begin_transaction():
         context.run_migrations()
 
 
 def do_run_migrations(connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    """Run migrations using an active database connection."""
+
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+    )
+
     with context.begin_transaction():
         context.run_migrations()
 
 
 async def run_migrations_online() -> None:
-    connectable = create_async_engine(settings.DATABASE_URL, poolclass=pool.NullPool)
+    """Run migrations using an asynchronous database connection."""
 
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
+    database_url = get_async_database_url()
 
-    await connectable.dispose()
+    connectable = create_async_engine(
+        database_url,
+        poolclass=pool.NullPool,
+    )
+
+    try:
+        async with connectable.connect() as connection:
+            await connection.run_sync(do_run_migrations)
+    finally:
+        await connectable.dispose()
 
 
 if context.is_offline_mode():
