@@ -15,6 +15,8 @@ from app.users.schemas import (
     UpdatePreferencesRequest,
     UpdateProfileRequest,
 )
+from app.config.settings import get_settings #this will remove this after domain verification is done
+settings = get_settings()
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -24,9 +26,9 @@ async def get_me(user: User = Depends(get_current_user), db: AsyncSession = Depe
     profile = await service.get_profile_by_user_id(db, user.id)
     profile_response = await service.build_profile_response(db, profile)
     return MeResponse(
-        id=user.id, email=user.email, is_verified=user.is_verified, is_admin=user.is_admin,
+        id=user.id, email=user.email, is_verified=user.is_verified or not settings.EMAIL_VERIFICATION_REQUIRED, is_admin=user.is_admin,
         created_at=user.created_at, profile=profile_response,
-    )
+    ) # or not settings.EMAIL_VERIFICATION_REQUIRED will remove this after domain verification is done
 
 
 @router.patch("/me", response_model=ProfileResponse)

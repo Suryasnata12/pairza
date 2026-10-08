@@ -80,6 +80,7 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
     RESEND_API_KEY: str = ""
     RESEND_FROM_EMAIL: str = "onboarding@resend.dev"
+    EMAIL_VERIFICATION_REQUIRED: bool = True # will remove this after domain verification is done
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
     EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours — less time-sensitive than a password reset
 

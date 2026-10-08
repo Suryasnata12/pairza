@@ -44,7 +44,8 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
 async def register(payload: RegisterRequest, response: Response, request: Request, db: AsyncSession = Depends(get_db)):
     await enforce_rate_limit("auth_register", request.client.host, settings.RATE_LIMIT_AUTH_ATTEMPTS_PER_MINUTE)
     user = await service.register_user(db, payload)
-    await service.send_verification_email(db, user)
+    if settings.EMAIL_VERIFICATION_REQUIRED:
+        await service.send_verification_email(db, user) # "if" functionwill remove this after domain verification is done
     access_token, refresh_token = await service.issue_token_pair(db, user)
     _set_auth_cookies(response, access_token, refresh_token)
     return AuthUserResponse(id=user.id, email=user.email, username=payload.username, is_verified=user.is_verified, is_admin=user.is_admin)

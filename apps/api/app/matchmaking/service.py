@@ -106,7 +106,7 @@ async def join_matchmaking(db: AsyncSession, redis: Redis, user: User) -> dict:
     if user.is_suspended or user.is_banned:
         raise ConflictError("This account can't join matchmaking right now.", code="account_restricted")
 
-    if not user.is_verified:
+    if settings.EMAIL_VERIFICATION_REQUIRED and not user.is_verified: # settings.EMAIL_VERIFICATION_REQUIRED will remove this after domain verification is done
         # Google accounts are already verified (Google itself proved the email — see
         # resolve_google_user); this only affects a password signup that hasn't confirmed the
         # email it registered with yet. See auth/service.py's send_verification_email /
