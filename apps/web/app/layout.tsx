@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Toaster } from "sonner";
+import { Analytics } from "@vercel/analytics/next";
 import { QueryProvider } from "@/app/providers/query-provider";
 import { AuthProvider } from "@/app/providers/auth-provider";
 import { AmbienceController } from "@/components/audio/ambience-controller";
@@ -58,6 +59,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             />
           </AuthProvider>
         </QueryProvider>
+        <Analytics />
       </body>
     </html>
   );
