@@ -222,7 +222,20 @@ export class AudioManager<Id extends string> {
     const ctx = this.ctx;
     if (ctx && ctx.state !== "running") void ctx.resume().catch(() => {});
   }
-
+  suspendContext(): boolean {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state !== "running") {
+      return false;
+    }
+    void ctx.suspend().catch(() => {});
+    return true;
+  }
+  resumeContext(): void {
+    const ctx = this.ctx;
+    if (ctx && ctx.state === "suspended") {
+      void ctx.resume().catch(() => {});
+    }
+  }
   // --- internals -----------------------------------------------------------
 
   private async startLoop(id: Id, definition: SoundDefinition): Promise<void> {

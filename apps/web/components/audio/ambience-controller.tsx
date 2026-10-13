@@ -24,7 +24,22 @@ export function AmbienceController() {
   useEffect(() => {
     setMounted(true);
     audioManager.play(AMBIENCE);
-    return () => audioManager.stop(AMBIENCE);
+    let shouldResumeOnVisible = false;
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        shouldResumeOnVisible = audioManager.suspendContext();
+        return;
+      }
+      if (shouldResumeOnVisible) {
+        shouldResumeOnVisible = false;
+        audioManager.resumeContext();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      audioManager.stop(AMBIENCE);
+    };
   }, []);
 
   if (!mounted) return null;
