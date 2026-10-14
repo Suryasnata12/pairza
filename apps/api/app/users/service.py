@@ -1,5 +1,5 @@
 import uuid
-
+from datetime import timedelta
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,16 @@ async def build_profile_response(db: AsyncSession, profile: Profile) -> ProfileR
         select(func.count()).select_from(UserBadge).where(UserBadge.user_id == profile.user_id)
     )
     badge_count = badge_count_result.scalar_one()
+    today = utcnow().date()
+    last_active = profile.last_active_date
+    last_active_day = (
+        last_active.date()
+        if hasattr(last_active, "date")
+        else last_active
+    )
+    current_streak = profile.current_streak
+    if (last_active_day is None or last_active_day < today - timedelta(days=1)):
+        current_streak = 0
 
     return ProfileResponse(
         user_id=profile.user_id,
@@ -25,7 +35,7 @@ async def build_profile_response(db: AsyncSession, profile: Profile) -> ProfileR
         mystery_count=profile.mystery_count,
         solved_count=profile.solved_count,
         solve_rate=profile.solve_rate,
-        current_streak=profile.current_streak,
+        current_streak=current_streak,
         longest_streak=profile.longest_streak,
         countries_encountered=profile.countries_encountered,
         categories_completed=profile.categories_completed,
