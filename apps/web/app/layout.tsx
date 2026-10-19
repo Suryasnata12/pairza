@@ -6,20 +6,47 @@ import { AuthProvider } from "@/app/providers/auth-provider";
 import { AmbienceController } from "@/components/audio/ambience-controller";
 import "./globals.css";
 
+
 export const metadata: Metadata = {
-  title: "Pairza — One Stranger. One Mystery. One Chance.",
+  metadataBase: new URL("https://pairza-inky.vercel.app"),
+
+  title: "Pairza | Play Online Mystery Games with Strangers",
+
   description:
-    "Every day, Pairza pairs you with one stranger, somewhere in the world, to solve one mystery together before the connection expires.",
+    "Play free online mystery games with Pairza. Meet a stranger, uncover clues, and solve a mystery together in a unique multiplayer experience.",
+
+  alternates: {
+    canonical: "/",
+  },
+
+  robots: {
+    index: true,
+    follow: true,
+  },
+
+  openGraph: {
+    title: "Pairza | Play Online Mystery Games with Strangers",
+    description:
+      "Meet a stranger, uncover clues, and solve a mystery together in Pairza, a multiplayer online mystery game.",
+    url: "https://pairza-inky.vercel.app/",
+    siteName: "Pairza",
+    type: "website",
+  },
+
   icons: {
     icon: [
       { url: "/favicon.ico" },
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
   },
+
   manifest: "/site.webmanifest",
 };
+
 
 export const viewport: Viewport = {
   themeColor: "#06070b",
