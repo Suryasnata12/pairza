@@ -133,6 +133,16 @@ export default function LandingPage() {
             Every day, Pairza pairs you with someone new, somewhere in the world. You each hold half a mystery.
             Together, against the clock, you have to solve it.
           </motion.p>
+          <motion.p
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.25 }}
+            className="mx-auto mt-4 max-w-xl text-sm text-ink-muted"
+          >
+            Pairza is an online multiplayer mystery game where you meet
+            a stranger, share clues, and solve a case together. Explore
+            ciphers, logic puzzles, geography, and internet mysteries.
+          </motion.p>
 
           <motion.div
             initial={{ opacity: 0, y: 24 }}
