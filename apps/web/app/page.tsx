@@ -282,7 +282,12 @@ export default function LandingPage() {
       </section>
 
       <footer className="relative border-t border-border-subtle px-6 py-10 text-center text-sm text-ink-faint">
-        Pairza — one stranger, one mystery, one chance.
+        <p>
+          Pairza — one stranger, one mystery, one chance.
+        </p>
+        <p className="mt-3">
+           © {new Date().getFullYear()} Pairza. All rights reserved.
+        </p>
       </footer>
     </div>
   );
