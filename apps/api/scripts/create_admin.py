@@ -54,7 +54,7 @@ async def create_or_promote_admin(db, email: str, password: str, username: str) 
     user = User(email=email, hashed_password=hash_password(password), is_verified=True, is_admin=True)
     db.add(user)
     await db.flush()
-    db.add(Profile(user_id=user.id, username=username, country_code="US"))
+    db.add(Profile(user_id=user.id, username=username, country_code="IN"))
     db.add(UserPreferences(user_id=user.id))
     await db.commit()
     return "created"
