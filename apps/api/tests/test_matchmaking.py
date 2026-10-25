@@ -10,6 +10,11 @@ from app.moderation.models import Block
 from app.sessions.models import MysterySession
 from tests.conftest import make_mystery, make_user
 
+import asyncio
+import time
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 @pytest.fixture
 async def redis():
@@ -157,3 +162,120 @@ async def test_matched_players_get_one_shared_deadline(db, redis):
 
     assert detail_a.expires_at == detail_b.expires_at == session.expires_at
     assert detail_a.duration_seconds == detail_b.duration_seconds == 10 * 60
+
+async def test_queued_player_status_retries_matchmaking(db, redis):
+    """Polling status should repair a queue left by simultaneous joins."""
+    await make_mystery(db, title="Retry Mystery")
+
+    user_a = await make_user(db, "retry_a@test.com", "retry_a")
+    user_b = await make_user(db, "retry_b@test.com", "retry_b")
+
+    # Simulate the outcome of two joins that both ended up waiting.
+    now = time.time()
+    await redis.zadd(
+        matchmaking_service.RedisKeys.MATCHMAKING_POOL,
+        {
+            str(user_a.id): now,
+            str(user_b.id): now + 0.001,
+        },
+    )
+
+    # A status poll must attempt to match a user who is queued.
+    result_a = await matchmaking_service.get_status(db, redis, user_a)
+
+    assert result_a["status"] == "matched"
+    session_a = result_a["session"]
+
+    result_b = await matchmaking_service.get_status(db, redis, user_b)
+
+    assert result_b["status"] == "matched"
+    assert result_b["session"].id == session_a.id
+
+    # One match only, and neither participant remains queued.
+    sessions = (
+        await db.execute(select(MysterySession))
+    ).scalars().all()
+
+    assert len(sessions) == 1
+    assert await redis.zcard(
+        matchmaking_service.RedisKeys.MATCHMAKING_POOL
+    ) == 0
+
+
+async def test_simultaneous_joins_eventually_match_both_players(db, redis):
+    """Concurrent join requests must converge on one shared session."""
+    await make_mystery(db, title="Concurrent Mystery")
+
+    user_a = await make_user(
+        db, "concurrent_a@test.com", "concurrent_a"
+    )
+    user_b = await make_user(
+        db, "concurrent_b@test.com", "concurrent_b"
+    )
+
+    # Each concurrent operation uses its own SQLAlchemy session.
+    # An AsyncSession must not be shared across concurrent tasks.
+    session_factory = async_sessionmaker(
+        bind=db.bind,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async def join_as(user):
+        async with session_factory() as session_db:
+            return await matchmaking_service.join_matchmaking(
+                session_db, redis, user
+            )
+
+    # This deliberately exercises the race instead of joining
+    # the users sequentially.
+    initial_results = await asyncio.gather(
+        join_as(user_a),
+        join_as(user_b),
+    )
+
+    assert all(
+        result["status"] in {"waiting", "matched"}
+        for result in initial_results
+    )
+
+    async def poll_as(user):
+        async with session_factory() as session_db:
+            return await matchmaking_service.get_status(
+                session_db, redis, user
+            )
+
+    # If both initial calls returned "waiting", the next status poll
+    # must retry matching. The calls are sequential here so a test
+    # isn't dependent on an additional timing race between two polls.
+    status_a = await poll_as(user_a)
+    status_b = await poll_as(user_b)
+
+    assert status_a["status"] == "matched"
+    assert status_b["status"] == "matched"
+    assert status_a["session"].id == status_b["session"].id
+
+    async with session_factory() as verify_db:
+        sessions = (
+            await verify_db.execute(select(MysterySession))
+        ).scalars().all()
+
+    assert len(sessions) == 1
+    assert await redis.zcard(
+        matchmaking_service.RedisKeys.MATCHMAKING_POOL
+    ) == 0
+
+
+async def test_lock_release_does_not_delete_another_owners_lock(redis):
+    """An expired lock owner's cleanup must not delete a newer lock."""
+    lock_key = matchmaking_service.RedisKeys.MATCHMAKING_LOCK
+
+    await redis.set(lock_key, "new-owner-token", ex=30)
+
+    await matchmaking_service._release_lock(redis, "old-owner-token")
+
+    assert await redis.get(lock_key) == "new-owner-token"
+
+    await matchmaking_service._release_lock(redis, "new-owner-token")
+
+    assert await redis.get(lock_key) is None
