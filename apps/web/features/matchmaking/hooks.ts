@@ -49,3 +49,30 @@ export function useJoinMatchmaking() {
     },
   });
 }
+export function useLeaveMatchmaking() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ status: string }>("/matchmaking/leave"),
+
+    onSuccess: () => {
+      queryClient.setQueryData<MatchmakingStatus>(
+        ["matchmaking", "status"],
+        {
+          status: "idle",
+          session_id: null,
+          expires_at: null,
+          partner_country_code: null,
+          waiting_since: null,
+        },
+      );
+
+      // Refresh the session in case matchmaking completed
+      // just as the player cancelled.
+      void queryClient.invalidateQueries({
+        queryKey: ["session", "current"],
+      });
+    },
+  });
+}

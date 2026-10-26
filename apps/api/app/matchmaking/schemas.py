@@ -9,3 +9,4 @@ class MatchmakingStatusResponse(BaseModel):
     session_id: uuid.UUID | None = None
     expires_at: datetime | None = None
     partner_country_code: str | None = None
+    waiting_since: datetime | None = None

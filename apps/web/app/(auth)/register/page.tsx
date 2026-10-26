@@ -14,7 +14,7 @@ import { COUNTRIES } from "@/lib/countries";
 export default function RegisterPage() {
   const router = useRouter();
   const register = useRegister();
-  const [form, setForm] = useState({ email: "", password: "", username: "", country_code: "US" });
+  const [form, setForm] = useState({ email: "", password: "", username: "", country_code: "IN" });
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {

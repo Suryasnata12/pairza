@@ -122,6 +122,7 @@ export interface MatchmakingStatus {
   session_id: string | null;
   expires_at: string | null;
   partner_country_code: string | null;
+  waiting_since: string | null;
 }
 
 export interface AnswerResponse {

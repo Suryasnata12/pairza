@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { MysteryReveal } from "@/components/mystery/mystery-reveal";
 import { useCurrentSession } from "@/features/session/hooks";
-import { useJoinMatchmaking, useMatchmakingStatus } from "@/features/matchmaking/hooks";
+import { useJoinMatchmaking, useLeaveMatchmaking, useMatchmakingStatus } from "@/features/matchmaking/hooks";
 import { useResendVerification } from "@/features/auth/hooks";
 import { ApiError } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/use-auth-store";
@@ -28,9 +28,25 @@ export default function HomePage() {
   const me = useAuthStore((s) => s.me);
   const { data: session, isLoading: sessionLoading } = useCurrentSession();
   const join = useJoinMatchmaking();
+  const leaveMatchmaking = useLeaveMatchmaking();
   const resendVerification = useResendVerification();
   const { data: matchStatus } = useMatchmakingStatus(!session && !sessionLoading);
   const [showReveal, setShowReveal] = useState(false);
+  const [clockNow, setClockNow] = useState(0);
+  useEffect(() =>{
+    if (matchStatus?.status !== "waiting") return;
+    const tick = () => setClockNow(Date.now());
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [matchStatus?.status]);
+  const waitingSinceMs = matchStatus?.waiting_since
+    ? Date.parse(matchStatus.waiting_since)
+    : clockNow;
+  const waitingSeconds =
+    matchStatus?.status === "waiting"
+      ? Math.max(0, Math.floor((clockNow - waitingSinceMs) / 1000))
+      : 0;
 
   useEffect(() => {
     if (session && session.status === "ACTIVE" && !hasSeenReveal(session.id)) {
@@ -90,15 +106,40 @@ export default function HomePage() {
   if (matchStatus?.status === "waiting") {
     return (
       <div className="mx-auto flex max-w-md flex-col items-center gap-6 py-20 text-center">
-        <motion.div animate={{ rotate: 360 }} transition={{ duration: 2.4, repeat: Infinity, ease: "linear" }}>
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: "linear" }}
+        >
           <Radar className="h-10 w-10 text-signal-teal" />
         </motion.div>
-        <h2 className="font-display text-2xl font-bold text-ink">Finding your stranger…</h2>
+        <h2 className="font-display text-2xl font-bold text-ink">
+          Finding your stranger…
+        </h2>
         <p className="text-sm text-ink-muted">
-          This can take a moment — you'll be paired the instant someone else is ready too.
+          We'll pair you as soon as another eligible player is ready.
         </p>
+        <div className="rounded-xl border border-border-subtle bg-white/5 px-5 py-3">
+          <p className="text-xs text-ink-faint">Time searching</p>
+          <p className="mt-1 font-mono text-2xl text-signal-teal">
+            {Math.floor(waitingSeconds / 60)}:
+            {String(waitingSeconds % 60).padStart(2, "0")}
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          disabled={leaveMatchmaking.isPending}
+          onClick={() => 
+            leaveMatchmaking.mutate(undefined,{
+              onSuccess: () => toast.success("Matchmaking cancelled."),
+              onError: () =>
+                toast.error("Couldn't cancel your search. Please try again."),
+            })
+          }
+        >
+          {leaveMatchmaking.isPending ? "Cancelling…" : "Cancel search"}
+        </Button>
       </div>
-    );
+    )
   }
 
   // --- Ready to start ---
