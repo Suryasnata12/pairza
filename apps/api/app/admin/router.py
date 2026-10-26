@@ -23,6 +23,7 @@ from app.moderation.schemas import ReportOut
 from app.mysteries.models import MYSTERY_CATEGORIES
 from app.mysteries.schemas import MysteryAdminOut, MysteryCreate, MysteryUpdate
 from app.users.models import User
+from app.common.redis_client import RedisKeys, get_redis
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -37,20 +38,52 @@ async def list_user_countries(admin: User = Depends(get_current_admin), db: Asyn
 
 @router.get("/users", response_model=list[AdminUserOut])
 async def list_users(
-    search: str | None = None, country: str | None = None, limit: int = Query(default=50, le=200), offset: int = 0,
-    admin: User = Depends(get_current_admin), db: AsyncSession = Depends(get_db),
+    search: str | None = None,
+    country: str | None = None,
+    limit: int = Query(default=50, le=200),
+    offset: int = 0,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
 ):
     rows = await service.list_users(db, search, limit, offset, country)
-    return [
-        AdminUserOut(
-            id=r["user"].id, email=r["user"].email, username=r["profile"].username,
-            country_code=r["profile"].country_code, is_active=r["user"].is_active,
-            is_suspended=r["user"].is_suspended, is_banned=r["user"].is_banned, is_admin=r["user"].is_admin,
-            created_at=r["user"].created_at, mystery_count=r["profile"].mystery_count,
-            solved_count=r["profile"].solved_count,
-        )
-        for r in rows
+
+    redis = get_redis()
+    keys = [
+        RedisKeys.PRESENCE_ONLINE.format(user_id=row["user"].id)
+        for row in rows
     ]
+    presence_values = await redis.mget(keys) if keys else []
+
+    result = []
+    for index, row in enumerate(rows):
+        user = row["user"]
+        profile = row["profile"]
+
+        is_online = (
+            bool(presence_values[index])
+            and user.is_active
+            and not user.is_suspended
+            and not user.is_banned
+        )
+
+        result.append(
+            AdminUserOut(
+                id=user.id,
+                email=user.email,
+                username=profile.username,
+                country_code=profile.country_code,
+                is_active=user.is_active,
+                is_suspended=user.is_suspended,
+                is_banned=user.is_banned,
+                is_admin=user.is_admin,
+                is_online=is_online,
+                created_at=user.created_at,
+                mystery_count=profile.mystery_count,
+                solved_count=profile.solved_count,
+            )
+        )
+
+    return result
 
 
 @router.post("/users/{user_id}/suspend")

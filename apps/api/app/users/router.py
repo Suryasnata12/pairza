@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.database import get_db
 from app.common.deps import get_current_user
 from app.common.exceptions import NotFoundError
+from app.common.redis_client import RedisKeys, get_redis
 from app.users import service
 from app.users.models import Profile, User, UserPreferences
 from app.users.schemas import (
@@ -30,6 +31,17 @@ async def get_me(user: User = Depends(get_current_user), db: AsyncSession = Depe
         created_at=user.created_at, profile=profile_response,
     ) # or not settings.EMAIL_VERIFICATION_REQUIRED will remove this after domain verification is done
 
+@router.post("/presence/heartbeat")
+async def heartbeat_presence(user: User = Depends(get_current_user)):
+    redis = get_redis()
+    key = RedisKeys.PRESENCE_ONLINE.format(user_id=user.id)
+
+    if user.is_suspended:
+        await redis.delete(key)
+        return {"status": "offline"}
+
+    await redis.set(key, "1", ex=120)
+    return {"status": "online"}
 
 @router.patch("/me", response_model=ProfileResponse)
 async def update_me(

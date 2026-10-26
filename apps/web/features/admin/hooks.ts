@@ -15,6 +15,7 @@ export interface AdminUser {
   created_at: string;
   mystery_count: number;
   solved_count: number;
+  is_online: boolean;
 }
 
 export interface AdminReport {
@@ -78,9 +79,14 @@ export function useAdminUsers(search: string, country: string) {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
       if (country) params.set("country", country);
+
       const query = params.toString();
-      return api.get<AdminUser[]>(`/admin/users${query ? `?${query}` : ""}`);
+
+      return api.get<AdminUser[]>(
+        `/admin/users${query ? `?${query}` : ""}`
+      );
     },
+    refetchInterval: 10_000,
   });
 }
 

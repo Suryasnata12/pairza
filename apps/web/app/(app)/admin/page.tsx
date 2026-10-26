@@ -225,6 +225,7 @@ function UsersTab() {
               <th className="p-3">User</th>
               <th className="p-3">Country</th>
               <th className="p-3">Stats</th>
+              <th className="p-3">Presence</th>
               <th className="p-3">Status</th>
               <th className="p-3">Actions</th>
             </tr>
@@ -245,10 +246,19 @@ function UsersTab() {
                   {u.solved_count}/{u.mystery_count} solved
                 </td>
                 <td className="p-3">
+                  {u.is_online ? (
+                    <Badge variant="teal">Online</Badge>
+                  ) : (
+                    <Badge variant="default">Offline</Badge>
+                  )}
+                </td>
+                <td className="p-3">
                   {u.is_banned ? (
                     <Badge variant="coral">Banned</Badge>
                   ) : u.is_suspended ? (
                     <Badge variant="gold">Suspended</Badge>
+                  ) : !u.is_active ? (
+                     <Badge variant="default">Inactive</Badge>
                   ) : (
                     <Badge variant="teal">Active</Badge>
                   )}

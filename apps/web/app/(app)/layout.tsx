@@ -11,6 +11,7 @@ import { useLogout } from "@/features/auth/hooks";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { countryCodeToFlag } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api-client";
 
 const NAV_LINKS = [
   { href: "/home", label: "Today" },
@@ -25,8 +26,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const logout = useLogout();
 
   useEffect(() => {
-    if (!isLoading && !me) router.replace("/login");
-  }, [me, isLoading, router]);
+    if (!me?.id) return;
+    const heartbeat = () => {
+      void api.post("/users/presence/heartbeat").catch(() => {
+        // A temporary heartbeat failure should not break navigation.
+      });
+    };
+    heartbeat();
+    const interval = window.setInterval(heartbeat, 30_000);
+    return () => window.clearInterval(interval);
+  }, [me?.id]);
 
   if (isLoading || !me) {
     return (

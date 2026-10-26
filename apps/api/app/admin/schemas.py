@@ -18,6 +18,7 @@ class AdminUserOut(BaseModel):
     created_at: datetime
     mystery_count: int
     solved_count: int
+    is_online: bool
 
     model_config = {"from_attributes": True}
 

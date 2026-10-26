@@ -27,3 +27,4 @@ class RedisKeys:
     PRESENCE = "pairza:presence"  # hash: user_id -> last_seen epoch
     SESSION_STATE = "pairza:session:{session_id}:state"  # mirrors authoritative status for fast reads
     RATE_LIMIT = "pairza:ratelimit:{scope}:{identity}"
+    PRESENCE_ONLINE = "pairza:presence:online:{user_id}"
