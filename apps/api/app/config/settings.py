@@ -10,10 +10,10 @@ from functools import lru_cache
 from typing import List
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
+from pathlib import Path
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=Path(__file__).resolve().parents[2] / ".env",extra="ignore",)
 
     # --- Core ---
     APP_NAME: str = "Pairza API"
@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     EMAIL_VERIFICATION_REQUIRED: bool = True # will remove this after domain verification is done
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
     EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours — less time-sensitive than a password reset
+
+    # --- Web Push notifications ---
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    VAPID_SUBJECT: str = "https://pairza-inky.vercel.app"
 
     # --- Frontend URLs (for links in emails etc.) ---
     FRONTEND_URL: str = "https://pairza-inky.vercel.app/"

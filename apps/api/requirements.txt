@@ -18,3 +18,5 @@ faker==33.1.0
 pytest==8.3.4
 pytest-asyncio==0.24.0
 aiosqlite==0.20.0
+pywebpush==2.5.0
+tzdata==2026.5

@@ -37,6 +37,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => window.clearInterval(interval);
   }, [me?.id]);
 
+  useEffect(() => {
+    if (!me?.id) return;
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!timezone) return;
+    void api.patch("/users/me/preferences",{timezone_region: timezone,})
+    .catch(() => {
+      // Timezone sync must not interrupt normal app usage.
+    });
+  }, [me?.id]);
+
   if (isLoading || !me) {
     return (
       <div className="flex min-h-screen items-center justify-center">

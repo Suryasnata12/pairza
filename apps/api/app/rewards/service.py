@@ -17,7 +17,9 @@ from app.mysteries.models import Mystery
 from app.mysteries.progression import rank_after_solve
 from app.rewards.models import Badge, Reward, UserBadge
 from app.sessions.models import Memory, MysterySession, UserMysteryHistory
-from app.users.models import Profile
+from app.users.models import Profile, UserPreferences
+from datetime import date, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 BASE_SOLVE_XP = 100
 
@@ -98,12 +100,25 @@ def _update_streak(profile: Profile, today: date) -> None:
 
 async def process_solve(db: AsyncSession, session: MysterySession, mystery: Mystery) -> dict[uuid.UUID, dict]:
     solve_seconds = (session.solved_at - session.started_at).total_seconds()
-    today = utcnow().date()
 
     profiles: dict[uuid.UUID, Profile] = {}
+    local_dates: dict[uuid.UUID, date] = {}
+    now = utcnow()
+
     for uid in (session.player_a_id, session.player_b_id):
         result = await db.execute(select(Profile).where(Profile.user_id == uid))
         profiles[uid] = result.scalar_one()
+        pref_result = await db.execute(
+            select(UserPreferences.timezone_region).where(
+                UserPreferences.user_id == uid
+            )
+        )
+        timezone_name = pref_result.scalar_one_or_none() or "UTC"
+        try:
+            user_timezone = ZoneInfo(timezone_name)
+        except (ZoneInfoNotFoundError, ValueError):
+            user_timezone = timezone.utc
+        local_dates[uid] = now.astimezone(user_timezone).date()
 
     results: dict[uuid.UUID, dict] = {}
 
@@ -111,7 +126,7 @@ async def process_solve(db: AsyncSession, session: MysterySession, mystery: Myst
         partner_id = session.partner_id(uid)
         partner_profile = profiles[partner_id]
 
-        _update_streak(profile, today)
+        _update_streak(profile, local_dates[uid])
         speed_bonus = calculate_speed_bonus(solve_seconds)
         streak_bonus = calculate_streak_bonus(profile.current_streak)
         xp_gain = BASE_SOLVE_XP + speed_bonus + streak_bonus

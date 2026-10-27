@@ -6,8 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.mixins import utcnow
 from app.rewards.models import UserBadge
-from app.users.models import Profile, UserDailyActivity
+from app.users.models import Profile, UserDailyActivity, UserPreferences
 from app.users.schemas import ProfileResponse
+from datetime import timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 async def build_profile_response(db: AsyncSession, profile: Profile) -> ProfileResponse:
@@ -15,7 +17,17 @@ async def build_profile_response(db: AsyncSession, profile: Profile) -> ProfileR
         select(func.count()).select_from(UserBadge).where(UserBadge.user_id == profile.user_id)
     )
     badge_count = badge_count_result.scalar_one()
-    today = utcnow().date()
+    pref_result = await db.execute(
+        select(UserPreferences.timezone_region).where(
+            UserPreferences.user_id == profile.user_id
+        )
+    )
+    timezone_name = pref_result.scalar_one_or_none() or "UTC"
+    try:
+        user_timezone = ZoneInfo(timezone_name)
+    except (ZoneInfoNotFoundError, ValueError):
+        user_timezone = timezone.utc
+    today = utcnow().astimezone(user_timezone).date()
     last_active = profile.last_active_date
     last_active_day = (
         last_active.date()

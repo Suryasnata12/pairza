@@ -16,6 +16,7 @@ from app.config.settings import get_settings
 from app.matchmaking.router import router as matchmaking_router
 from app.moderation.router import router as moderation_router
 from app.mysteries.router import router as mysteries_router
+from app.notifications.router import router as notifications_router
 from app.rewards.router import router as rewards_router
 from app.sessions import service as sessions_service
 from app.sessions.router import router as sessions_router
@@ -96,6 +97,7 @@ app.include_router(rewards_router)
 app.include_router(moderation_router)
 app.include_router(admin_router)
 app.include_router(websockets_router)
+app.include_router(notifications_router)
 
 if settings.TRUSTED_PROXY_IPS:
     # Only takes effect when explicitly configured (see TRUSTED_PROXY_IPS in settings.py) —
