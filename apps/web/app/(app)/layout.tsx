@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { countryCodeToFlag } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api-client";
+import { NotificationPermissionPrompt } from "@/components/notifications/notification-permission-prompt";
 
 const NAV_LINKS = [
   { href: "/home", label: "Today" },
@@ -57,6 +58,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen">
+      <NotificationPermissionPrompt userId={me.id} />
       <header className="sticky top-0 z-30 border-b border-border-subtle bg-void/80 backdrop-blur-lg">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-8">
