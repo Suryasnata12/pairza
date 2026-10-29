@@ -65,9 +65,18 @@ async def session_socket(
             return
         partner_id = session.partner_id(user_id)
 
-    partner_was_online = manager.is_online(session_id, partner_id) if partner_id else False
     await manager.connect(session_id, user_id, websocket)
-    await manager.broadcast(session_id, "user.online", {"user_id": str(user_id)}, exclude_user=user_id)
+    partner_was_online = (
+        manager.is_online(session_id, partner_id)
+        if partner_id else False
+    )
+    if partner_was_online and partner_id:
+        await manager.send_to_user(
+            session_id, partner_id, "user.online", {"user_id": str(user_id)},
+        )
+    await manager.broadcast(
+        session_id, "user.online", {"user_id": str(user_id)}, exclude_user=user_id,
+    )
 
     # First time both participants have ever been in the room together —
     # drop a persisted "partner_joined" system message, once per session.
@@ -140,4 +149,7 @@ async def session_socket(
         pass
     finally:
         manager.disconnect(session_id, user_id, websocket)
-        await manager.broadcast(session_id, "user.offline", {"user_id": str(user_id)}, exclude_user=user_id)
+        if not manager.is_online(session_id, user_id):
+            await manager.broadcast(
+                session_id, "user.offline", {"user_id": str(user_id)}, exclude_user=user_id,
+            )
