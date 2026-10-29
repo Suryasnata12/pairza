@@ -125,6 +125,14 @@ class StageCandidate(BaseModel):
     checkpoint_answer_patterns: list[str] | None = None
     clues: list[ClueCandidate] = Field(min_length=2, max_length=2)
 
+    # Validation-only metadata: used to independently enforce difficulty and
+    # dependency architecture before persistence. These are not database columns
+    # and are not saved by scripts/generate_mysteries.py. Defaults keep older
+    # candidate JSON parseable; the stricter validator may reject missing metadata.
+    mechanic: str | None = Field(default=None, min_length=3, max_length=80)
+    reasoning_operation: str | None = Field(default=None, min_length=3, max_length=350)
+    requires_checkpoints: list[str] = Field(default_factory=list, max_length=3)
+
 
 class MysteryCandidate(BaseModel):
     """The generator's raw output for one mystery, before any validation."""
