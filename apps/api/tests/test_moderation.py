@@ -6,6 +6,7 @@ from app.sessions.models import MysterySession
 from tests.conftest import make_mystery, make_user
 from tests.test_sessions import _create_session_directly
 
+import os
 
 async def test_blocking_partner_immediately_ends_active_session_as_failed(db):
     """This is the safety-critical one: nobody should be stuck finishing a
@@ -58,7 +59,7 @@ async def test_blocked_pair_permanently_excluded_from_future_matchmaking(db):
     await moderation_service.block_user(db, blocker_id=user_a.id, blocked_id=user_b.id)
 
     from redis.asyncio import from_url
-    redis = from_url("redis://localhost:6379/1", decode_responses=True)
+    redis = from_url(os.environ["REDIS_URL"], decode_responses=True,)
     try:
         await matchmaking_service.join_matchmaking(db, redis, user_a)
         result = await matchmaking_service.join_matchmaking(db, redis, user_b)

@@ -14,11 +14,11 @@ from app.common.exceptions import ConflictError, UnauthorizedError
 from app.matchmaking import service as matchmaking_service
 from app.users.models import EmailVerificationToken, User
 from tests.conftest import make_user
-
+import os
 
 @pytest.fixture
 async def redis():
-    r = from_url("redis://localhost:6379/1", decode_responses=True)
+    r = from_url(os.environ["REDIS_URL"], decode_responses=True,)
     yield r
     await r.aclose()
 

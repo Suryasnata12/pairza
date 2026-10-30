@@ -13,12 +13,14 @@ from tests.conftest import make_mystery, make_user
 import asyncio
 import time
 
+import os
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 @pytest.fixture
 async def redis():
-    r = from_url("redis://localhost:6379/1", decode_responses=True)
+    r = from_url(os.environ["REDIS_URL"], decode_responses=True)
     yield r
     await r.aclose()
 
