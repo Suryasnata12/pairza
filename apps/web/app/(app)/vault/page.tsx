@@ -43,7 +43,7 @@ export default function VaultPage() {
               <div className={`h-1 w-full ${memory.solved ? "bg-signal-teal" : "bg-urgent-coral"}`} />
               <CardContent className="flex flex-col gap-3 p-5">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs text-ink-faint">DAY {String(memory.day_number).padStart(3, "0")}</span>
+                  <span className="font-mono text-xs text-ink-faint">M {String(memory.day_number).padStart(3, "0")}</span>
                   {memory.solved ? (
                     <CheckCircle2 className="h-4 w-4 text-signal-teal" />
                   ) : (
