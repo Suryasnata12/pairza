@@ -72,7 +72,7 @@ async def session_socket(
     )
     if partner_was_online and partner_id:
         await manager.send_to_user(
-            session_id, partner_id, "user.online", {"user_id": str(user_id)},
+            session_id, user_id, "user.online", {"user_id": str(partner_id)},
         )
     await manager.broadcast(
         session_id, "user.online", {"user_id": str(user_id)}, exclude_user=user_id,
