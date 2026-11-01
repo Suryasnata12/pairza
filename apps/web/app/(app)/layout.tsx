@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Flame, LayoutGrid, LogOut, ShieldCheck, Sparkles, User as UserIcon } from "lucide-react";
+import { Flame, LayoutGrid, LogOut, ShieldCheck, Sparkles, User as UserIcon, LifeBuoy, } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useLogout } from "@/features/auth/hooks";
@@ -130,6 +130,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-ink-muted outline-none hover:bg-white/5 hover:text-ink"
                     >
                       <UserIcon className="h-4 w-4" /> Profile
+                    </Link>
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item asChild>
+                    <Link
+                      href="/help-support"
+                      className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-ink-muted outline-none hover:bg-white/5 hover:text-ink"
+                    >
+                      <LifeBuoy className="h-4 w-4" /> Help & Support
                     </Link>
                   </DropdownMenu.Item>
                   <DropdownMenu.Item
