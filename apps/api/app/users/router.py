@@ -11,6 +11,7 @@ from app.common.redis_client import RedisKeys, get_redis
 from app.users import service
 from app.users.models import Profile, User, UserPreferences
 from app.users.schemas import (
+    EngagementNotificationPreferenceResponse,
     MeResponse,
     ProfileResponse,
     UpdatePreferencesRequest,
@@ -56,6 +57,26 @@ async def update_me(
     await db.refresh(profile)
     return await service.build_profile_response(db, profile)
 
+@router.get(
+    "/me/preferences",
+    response_model=EngagementNotificationPreferenceResponse,
+)
+async def get_my_preferences(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(UserPreferences).where(
+            UserPreferences.user_id == user.id
+        )
+    )
+    prefs = result.scalar_one()
+
+    return EngagementNotificationPreferenceResponse(
+        engagement_notifications_enabled=(
+            prefs.engagement_notifications_enabled
+        )
+    )
 
 @router.patch("/me/preferences")
 async def update_preferences(
