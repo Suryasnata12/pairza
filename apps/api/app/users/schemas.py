@@ -49,3 +49,5 @@ class MeResponse(BaseModel):
     profile: ProfileResponse
 
     model_config = {"from_attributes": True}
+class EngagementNotificationPreferenceResponse(BaseModel):
+    engagement_notifications_enabled: bool
