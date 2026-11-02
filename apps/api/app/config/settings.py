@@ -11,7 +11,7 @@ from typing import List
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
-
+from datetime import datetime
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=Path(__file__).resolve().parents[2] / ".env",extra="ignore",)
 
@@ -88,6 +88,15 @@ class Settings(BaseSettings):
     VAPID_PUBLIC_KEY: str = ""
     VAPID_PRIVATE_KEY: str = ""
     VAPID_SUBJECT: str = "https://pairza-inky.vercel.app"
+
+    # --- Engagement / promotional notifications ---
+    ENGAGEMENT_NOTIFICATIONS_MODE: str = "off"
+
+    # Comma-separated UUIDs of users participating in the test.
+    ENGAGEMENT_NOTIFICATIONS_ALLOWLIST: str = ""
+
+    # UTC expiry timestamp for the 7-day test.
+    ENGAGEMENT_NOTIFICATIONS_TEST_END_AT: datetime | None = None
 
     # --- Frontend URLs (for links in emails etc.) ---
     FRONTEND_URL: str = "https://pairza-inky.vercel.app/"

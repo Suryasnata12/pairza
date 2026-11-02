@@ -37,6 +37,7 @@ class UpdatePreferencesRequest(BaseModel):
     puzzle_experience_level: str | None = None
     preferred_categories: list[str] | None = None
     notifications_enabled: bool | None = None
+    engagement_notifications_enabled: bool | None = None
 
 
 class MeResponse(BaseModel):

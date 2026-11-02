@@ -9,6 +9,7 @@ from app.common.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 from datetime import date, datetime
 
 from sqlalchemy import (
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -95,4 +96,86 @@ class PushReminderLog(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     last_error: Mapped[str | None] = mapped_column(
         String(500), nullable=True
+    )
+
+class EngagementNotificationLog(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Tracks promotional push notifications and prevents duplicate delivery."""
+
+    __tablename__ = "engagement_notification_logs"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "local_date",
+            "delivery_slot",
+            name="uq_engagement_log_user_date_slot",
+        ),
+        CheckConstraint(
+            "delivery_slot IN (1, 2)",
+            name="ck_engagement_log_delivery_slot",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'sent', 'failed')",
+            name="ck_engagement_log_status",
+        ),
+        Index(
+            "ix_engagement_log_user_sent_at",
+            "user_id",
+            "sent_at",
+        ),
+        Index(
+            "ix_engagement_log_status",
+            "status",
+        ),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # Recipient's local calendar date.
+    local_date: Mapped[date] = mapped_column(
+        Date,
+        nullable=False,
+    )
+
+    # Only slots 1 and 2 are allowed for each local date.
+    delivery_slot: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    message_id: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )
+
+    category: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+    )
+
+    # pending, sent, or failed.
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="pending",
+    )
+
+    attempts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    last_error: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
     )
