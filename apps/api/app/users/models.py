@@ -88,7 +88,7 @@ class UserPreferences(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     interests: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
     puzzle_experience_level: Mapped[str] = mapped_column(String(16), default="beginner")
     preferred_categories: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
-    notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     engagement_notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     user: Mapped["User"] = relationship(back_populates="preferences")
 

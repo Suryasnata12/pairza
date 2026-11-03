@@ -8,6 +8,7 @@ from app.common.database import get_db
 from app.common.deps import get_current_user
 from app.config.settings import get_settings
 from app.notifications.models import PushSubscription
+from app.users.models import UserPreferences
 from app.notifications.schemas import (
     PushSubscriptionCreate,
     PushSubscriptionDelete,
@@ -72,6 +73,20 @@ async def subscribe_push(
         subscription.p256dh_key = payload.keys.p256dh
         subscription.auth_key = payload.keys.auth
 
+    preferences_result = await db.execute(
+        select(UserPreferences).where(
+            UserPreferences.user_id == user.id
+        )
+    )
+    preferences = preferences_result.scalar_one_or_none()
+    if preferences is None:
+        preferences = UserPreferences(user_id=user.id)
+        db.add(preferences)
+
+    # The explicit first-login browser opt-in enables both categories.
+    preferences.notifications_enabled = True
+    preferences.engagement_notifications_enabled = True
+
     await db.commit()
 
     return {"status": "subscribed"}
@@ -83,7 +98,7 @@ async def unsubscribe_push(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Remove this browser subscription for the authenticated user."""
+    # Remove this browser subscription and disable both notification categories.
     await db.execute(
         delete(PushSubscription).where(
             PushSubscription.user_id == user.id,
@@ -91,6 +106,16 @@ async def unsubscribe_push(
             == _endpoint_hash(payload.endpoint),
         )
     )
-    await db.commit()
 
+    preferences_result = await db.execute(
+        select(UserPreferences).where(
+            UserPreferences.user_id == user.id
+        )
+    )
+    preferences = preferences_result.scalar_one_or_none()
+    if preferences is not None:
+        preferences.notifications_enabled = False
+        preferences.engagement_notifications_enabled = False
+
+    await db.commit()
     return {"status": "unsubscribed"}

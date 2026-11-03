@@ -44,8 +44,14 @@ export async function enablePushNotifications(): Promise<void> {
   const permission = await Notification.requestPermission();
 
   if (permission !== "granted") {
+    await disablePushNotifications().catch(async () => {
+      await api.patch("/users/me/preferences", {
+        notifications_enabled: false,
+        engagement_notifications_enabled: false,
+      });
+    });
     throw new Error(
-      "Notification permission was not granted. Check your browser settings."
+      "Notification permission was not granted. Streak reminders and Pairza updates remain disabled."
     );
   }
 
@@ -83,14 +89,20 @@ export async function enablePushNotifications(): Promise<void> {
 }
 
 export async function disablePushNotifications(): Promise<void> {
-  const subscription = await getPushSubscription();
+  const subscription = await getPushSubscription().catch(() => null);
 
-  if (!subscription) return;
+  if (subscription) {
+    // The API disables both categories and removes this browser subscription.
+    await api.post("/notifications/unsubscribe", {
+      endpoint: subscription.endpoint,
+    });
+    await subscription.unsubscribe();
+    return;
+  }
 
-  // Remove the server record before removing the local subscription.
-  await api.post("/notifications/unsubscribe", {
-    endpoint: subscription.endpoint,
+  // Persist the account-level opt-out even with no local subscription.
+  await api.patch("/users/me/preferences", {
+    notifications_enabled: false,
+    engagement_notifications_enabled: false,
   });
-
-  await subscription.unsubscribe();
 }

@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { BellRing, LoaderCircle, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "@/lib/api-client";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 
 import {
+  disablePushNotifications,
   enablePushNotifications,
   getPushSubscription,
   isPushSupported,
@@ -50,8 +52,11 @@ export function NotificationPermissionPrompt({
       const currentPermission = Notification.permission;
       setPermission(currentPermission);
 
-      // Do not keep asking users who have blocked notifications.
-      if (currentPermission === "denied") return;
+      // A browser-level block disables both notification categories for this account.
+      if (currentPermission === "denied") {
+        void disablePushNotifications().catch(() => {});
+        return;
+      }
 
       // Respect dismissal for the rest of this browser session.
       try {
@@ -63,9 +68,22 @@ export function NotificationPermissionPrompt({
       }
 
       try {
-        const subscription = await getPushSubscription();
+        const [subscription, preferences] = await Promise.all([
+          getPushSubscription(),
+          api.get<{
+            notifications_enabled: boolean;
+            engagement_notifications_enabled: boolean;
+          }>("/users/me/preferences"),
+        ]);
 
-        if (cancelled || subscription) return;
+        if (cancelled) return;
+
+        const alreadyEnabled =
+          Boolean(subscription) &&
+          preferences.notifications_enabled &&
+          preferences.engagement_notifications_enabled;
+
+        if (alreadyEnabled) return;
 
         setOpen(true);
       } catch {
@@ -91,6 +109,8 @@ export function NotificationPermissionPrompt({
       // The dialog can still be dismissed if storage is unavailable.
     }
 
+    // Maybe later is an opt-out; both categories remain disabled.
+    void disablePushNotifications().catch(() => {});
     setOpen(false);
   }, [dismissedKey]);
 
@@ -125,7 +145,7 @@ export function NotificationPermissionPrompt({
         // Successful subscription does not depend on session storage.
       }
 
-      toast.success("Pairza notifications are ready on this browser.");
+      toast.success("Streak reminders and Pairza updates are enabled.");
     } catch (cause) {
       const message =
         cause instanceof Error
@@ -136,11 +156,12 @@ export function NotificationPermissionPrompt({
         isPushSupported() &&
         Notification.permission === "denied"
       ) {
+        await disablePushNotifications().catch(() => {});
         setPermission("denied");
         setOpen(false);
 
         toast.error(
-          "Notifications are blocked. Allow them in your browser's site settings."
+          "Notifications are blocked. Streak reminders and Pairza updates are disabled."
         );
       } else {
         setError(message);
@@ -164,21 +185,22 @@ export function NotificationPermissionPrompt({
           <DialogTitle className="text-xl sm:text-2xl">
             {permission === "granted"
               ? "Finish setting up notifications"
-              : "Protect your Pairza streak"}
+              : "Stay connected with Pairza"}
           </DialogTitle>
 
           <DialogDescription className="mt-2 text-center leading-relaxed">
             {permission === "granted"
               ? "Your browser allows notifications, but Pairza still needs to finish setting up reminders on this device."
-              : "Get a reminder when your streak is at risk, so you can return to Pairza and solve a mystery before your streak breaks."}
+              : "Get reminders when your streak is at risk, plus occasional Pairza updates about new mysteries, challenges, and gameplay."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="mt-3 flex items-start gap-3 rounded-xl border border-border-subtle bg-white/[0.03] p-3">
           <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-signal-teal" />
           <p className="text-xs leading-relaxed text-ink-muted">
-            You control browser notification permissions. Pairza uses
-            reminders to help you keep your streak.
+            Enabling notifications turns on both streak reminders and
+            promotional Pairza updates. You can turn both off anytime
+            from your Profile.
           </p>
         </div>
 
@@ -206,7 +228,7 @@ export function NotificationPermissionPrompt({
             ) : permission === "granted" ? (
               "Finish setup"
             ) : (
-              "Allow notifications"
+              "Enable notifications"
             )}
           </Button>
 

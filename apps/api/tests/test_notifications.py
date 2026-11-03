@@ -5,7 +5,7 @@ import hashlib
 from scripts import send_streak_reminders
 from app.notifications import router as notifications_router
 from app.notifications.models import PushSubscription
-from app.notifications.schemas import PushSubscriptionCreate
+from app.notifications.schemas import PushSubscriptionCreate, PushSubscriptionDelete
 from tests.conftest import make_user
 from sqlalchemy.exc import IntegrityError
 from app.notifications.models import PushReminderLog
@@ -61,6 +61,45 @@ async def test_subscription_is_saved_and_reassigned(db, monkeypatch):
     assert len(rows) == 1
     assert rows[0].user_id == user_b.id
     assert rows[0].endpoint == payload.endpoint
+
+    user_b_preferences = (
+        await db.execute(
+            select(UserPreferences).where(UserPreferences.user_id == user_b.id)
+        )
+    ).scalar_one()
+    assert user_b_preferences.notifications_enabled is True
+    assert user_b_preferences.engagement_notifications_enabled is True
+
+
+async def test_unsubscribe_disables_both_notification_categories(db, monkeypatch):
+    monkeypatch.setattr(notifications_router.settings, "VAPID_PUBLIC_KEY", "test-public-key")
+    monkeypatch.setattr(notifications_router.settings, "VAPID_PRIVATE_KEY", "test-private-key")
+
+    user = await make_user(db, "push_unsubscribe@test.com", "push_unsubscribe")
+    payload = PushSubscriptionCreate(
+        endpoint="https://fcm.googleapis.com/fcm/send/unsubscribe-test",
+        keys={"p256dh": "test-p256dh-key", "auth": "test-auth-key"},
+    )
+
+    await notifications_router.subscribe_push(payload, user, db)
+    await notifications_router.unsubscribe_push(
+        PushSubscriptionDelete(endpoint=payload.endpoint), user, db
+    )
+
+    preferences = (
+        await db.execute(
+            select(UserPreferences).where(UserPreferences.user_id == user.id)
+        )
+    ).scalar_one()
+    assert preferences.notifications_enabled is False
+    assert preferences.engagement_notifications_enabled is False
+
+    subscriptions = (
+        await db.execute(
+            select(PushSubscription).where(PushSubscription.user_id == user.id)
+        )
+    ).scalars().all()
+    assert subscriptions == []
 
 
 def test_non_https_or_unrecognized_push_endpoint_is_rejected():
