@@ -3,13 +3,20 @@
 import { useEffect, useState } from "react";
 import { BellRing, BellOff, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
+
 import { Card, CardContent } from "@/components/ui/card";
+import { api } from "@/lib/api-client";
 import {
   disablePushNotifications,
   enablePushNotifications,
   getPushSubscription,
   isPushSupported,
 } from "@/lib/push-notifications";
+
+type PreferenceResponse = {
+  notifications_enabled: boolean;
+  engagement_notifications_enabled: boolean;
+};
 
 export function PushNotificationSettings() {
   const [supported, setSupported] = useState<boolean | null>(null);
@@ -19,48 +26,61 @@ export function PushNotificationSettings() {
   useEffect(() => {
     let cancelled = false;
 
-    async function checkSubscription() {
+    async function checkSetup() {
       const available = isPushSupported();
-
       if (!cancelled) setSupported(available);
       if (!available) return;
 
+      if (Notification.permission === "denied") {
+        await disablePushNotifications().catch(() => {});
+        if (!cancelled) setEnabled(false);
+        return;
+      }
+
       try {
-        const subscription = await getPushSubscription();
+        const [preferences, subscription] = await Promise.all([
+          api.get<PreferenceResponse>("/users/me/preferences"),
+          getPushSubscription(),
+        ]);
 
         if (!cancelled) {
-          setEnabled(Boolean(subscription));
+          setEnabled(
+            Notification.permission === "granted" &&
+              Boolean(subscription) &&
+              preferences.notifications_enabled &&
+              preferences.engagement_notifications_enabled,
+          );
         }
       } catch {
-        // Keep the page usable even if the browser check fails.
+        if (!cancelled) setEnabled(false);
       }
     }
 
-    void checkSubscription();
-
+    void checkSetup();
     return () => {
       cancelled = true;
     };
   }, []);
 
   async function handleToggle() {
+    if (busy || supported !== true) return;
     setBusy(true);
 
     try {
       if (enabled) {
         await disablePushNotifications();
         setEnabled(false);
-        toast.success("Pairza reminders disabled.");
+        toast.success("Streak reminders and Pairza updates are disabled.");
       } else {
         await enablePushNotifications();
         setEnabled(true);
-        toast.success("Pairza reminders enabled on this browser.");
+        toast.success("Streak reminders and Pairza updates are enabled.");
       }
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
-          : "Could not update notification settings."
+          : "Could not update Pairza notification settings.",
       );
     } finally {
       setBusy(false);
@@ -74,24 +94,24 @@ export function PushNotificationSettings() {
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-signal-teal-dim">
             <BellRing className="h-5 w-5 text-signal-teal" />
           </div>
-
           <div>
             <h2 className="font-display text-lg font-semibold text-ink">
-              Streak reminders
+              Push notifications
             </h2>
             <p className="mt-1 text-sm text-ink-muted">
-              Receive browser notifications about your Pairza streak.
+              Manage streak reminders and occasional Pairza updates about new
+              mysteries, challenges, and gameplay in one place.
             </p>
-
             {supported === false && (
               <p className="mt-2 text-xs text-urgent-coral">
                 Push notifications are not supported in this browser context.
               </p>
             )}
-
             {supported && (
               <p className="mt-2 text-xs text-ink-faint">
-                This setting applies to the current browser or device.
+                One account-level setting controls both notification types.
+                Browser permission and an active device subscription are
+                required for delivery.
               </p>
             )}
           </div>
@@ -110,12 +130,11 @@ export function PushNotificationSettings() {
           ) : (
             <BellRing className="h-4 w-4" />
           )}
-
           {busy
             ? "Updating…"
             : enabled
-              ? "Disable reminders"
-              : "Enable reminders"}
+              ? "Disable notifications"
+              : "Enable notifications"}
         </button>
       </CardContent>
     </Card>

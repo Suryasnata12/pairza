@@ -8,8 +8,8 @@ import { useAuthStore } from "@/stores/use-auth-store";
 import { useBadges } from "@/features/rewards/hooks";
 import { CATEGORY_LABELS } from "@/types";
 import { cn } from "@/lib/utils";
-import { EngagementNotificationSettings } from
-  "@/components/notifications/engagement-notification-settings";
+import { PushNotificationSettings } from
+  "@/components/notifications/push-notification-settings";
 
 function StatTile({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string }) {
   return (
@@ -48,7 +48,7 @@ export default function ProfilePage() {
         <StatTile icon={Award} label="Longest streak" value={`${p.longest_streak}d`} />
         <StatTile icon={Globe2} label="Countries met" value={String(p.countries_encountered.length)} />
       </div>
-      <EngagementNotificationSettings />
+      <PushNotificationSettings />
       {p.average_solve_seconds != null && (
         <p className="text-sm text-ink-muted">
           Average solve time: <span className="font-mono text-ink">{formatCountdown(p.average_solve_seconds)}</span>

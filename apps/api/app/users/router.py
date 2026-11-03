@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +11,7 @@ from app.common.redis_client import RedisKeys, get_redis
 from app.users import service
 from app.users.models import Profile, User, UserPreferences
 from app.users.schemas import (
-    EngagementNotificationPreferenceResponse,
+    PushNotificationPreferenceResponse,
     MeResponse,
     ProfileResponse,
     UpdatePreferencesRequest,
@@ -59,7 +59,7 @@ async def update_me(
 
 @router.get(
     "/me/preferences",
-    response_model=EngagementNotificationPreferenceResponse,
+    response_model=PushNotificationPreferenceResponse,
 )
 async def get_my_preferences(
     user: User = Depends(get_current_user),
@@ -72,10 +72,9 @@ async def get_my_preferences(
     )
     prefs = result.scalar_one()
 
-    return EngagementNotificationPreferenceResponse(
-        engagement_notifications_enabled=(
-            prefs.engagement_notifications_enabled
-        )
+    return PushNotificationPreferenceResponse(
+        notifications_enabled=prefs.notifications_enabled,
+        engagement_notifications_enabled=prefs.engagement_notifications_enabled,
     )
 
 @router.patch("/me/preferences")
@@ -84,9 +83,35 @@ async def update_preferences(
 ):
     result = await db.execute(select(UserPreferences).where(UserPreferences.user_id == user.id))
     prefs = result.scalar_one()
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    values = payload.model_dump(exclude_unset=True)
+
+    notification_fields = (
+        "notifications_enabled",
+        "engagement_notifications_enabled",
+    )
+    supplied = [
+        values[field]
+        for field in notification_fields
+        if field in values and values[field] is not None
+    ]
+
+    if len(set(supplied)) > 1:
+        raise HTTPException(
+            status_code=422,
+            detail="Streak and promotional notifications must share one preference.",
+        )
+
+    if supplied:
+        enabled = supplied[0]
+        prefs.notifications_enabled = enabled
+        prefs.engagement_notifications_enabled = enabled
+
+    for field, value in values.items():
+        if field in notification_fields:
+            continue
         if value is not None:
             setattr(prefs, field, value)
+
     await db.commit()
     return {"status": "updated"}
 
