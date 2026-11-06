@@ -13,7 +13,7 @@ self.addEventListener("push", (event) => {
   const options = {
     body: data.body || "Your next mystery is waiting.",
     icon: "/icon-192.png",
-    badge: "/icon-192.png",
+    badge: "/notification-badge.png",
     tag: data.tag || "pairza-streak-reminder",
     data: { url: data.url || "/home" },
   };
